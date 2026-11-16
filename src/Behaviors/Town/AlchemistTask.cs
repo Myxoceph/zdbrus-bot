@@ -90,7 +90,7 @@ public class AlchemistTask : BotTask
             yield break;
         }
 
-        yield return new WaitForSeconds(3);
+        yield return new WaitForSeconds(3f);
         var experiments = new Experiments();
         var resources = GetResourceTypes();
         yield return experiments.Claim();
@@ -117,7 +117,7 @@ public class AlchemistTask : BotTask
             yield break;
         }
 
-        yield return new WaitForSeconds(1);
+        yield return new WaitForSeconds(1f);
         yield return experiments.Start(startableResources);
         NextRunTime = experiments.NextRunTime(Experiments.ValidResourceIds);
         yield return Alchemist.Close;

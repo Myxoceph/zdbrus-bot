@@ -1,4 +1,4 @@
-ZDBRUS BOT 0.7.62 - auto-play mod for Firestone: Idle Clicker Online RPG
+ZDBRUS BOT 0.7.63 - auto-play mod for Firestone: Idle Clicker Online RPG
 Website: https://zdbrus.github.io/zdbrus-bot/
 Downloads and release notes: https://github.com/zdbrus/zdbrus-bot/releases
 Discord (help, bugs, suggestions): https://discord.gg/U4APWwTa7F
@@ -53,7 +53,9 @@ With Balance selected, it uses gaps between tasks even when the next check is le
 then finishes its short pass before handing over. Ready and running tasks still take priority;
 Focus still pauses as soon as a task is approaching.
 Numbered priority chips keep your chosen order: tap to remove an item, then tap it to add it last.
-Clear empties a list; Recommended puts back the guide order (Battle cry and Fate first for talents).
+Clear empties a list; Recommended puts back the guide order (Aurora's Steam Complete Guide).
+F2 > RUN runs any enabled task right away, and starts the bot if it was stopped.
+War machine levels get expedition tokens before the Personal Tree, and one chest is kept for the daily quest.
 Upgrade buyers hold for an unaffordable higher tier rather than spending on lower tiers; level-locked
 Exotic upgrades are skipped until unlocked. Previously unknown preview-based names may be read once,
 then remembered between launches. Prices and completion state are not persisted.

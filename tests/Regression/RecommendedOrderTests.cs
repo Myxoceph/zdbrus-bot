@@ -40,7 +40,58 @@ internal static class RecommendedOrderTests
             Check(missing.Count == 0, $"{key}: guide order leaves out {string.Join(", ", missing)}");
         }
         var talents = RecommendedOrders.Split(RecommendedOrders.Talents);
-        Check(talents[0] == "Battle cry" && talents[1] == "Fate", "Talents must lead with Battle cry and Fate.");
+        Check(talents[0] == "Leader - Auto Abilities" && talents[1] == "Auto attacks",
+            "Talents must lead with the two one-point auto-ability talents.");
+        Check(talents.IndexOf("Guardian power") == talents.Count - 1, "Guide: Guardian power goes last.");
+
+        // Names read from the live game (0.7.62 tree). A name the game does not use is never bought.
+        var tree = new[] { "All main attributes", "Leadership", "Guardian power", "Team bonus",
+            "Leader - Auto Abilities", "Attack speed", "Trainer Skills", "Critical chance", "Auto attacks", "Dodge",
+            "Critical damage", "Librarian", "Meteorite hunter", "Expeditioner", "Powerless enemy", "Powerless boss",
+            "Weaklings", "Expose Weakness", "Ancient Knowledge", "Raining gold", "Coworkers", "Twin dragons",
+            "Battle cry", "Alchemy", "Fate", "Mana heroes", "Energy heroes", "Rage heroes", "Damage specialization",
+            "Tank specialization", "Healer specialization", "Fist fight", "Precision", "Magic spells" };
+        var notInGame = talents.Where(t => !tree.Contains(t, StringComparer.OrdinalIgnoreCase)).ToList();
+        Check(notInGame.Count == 0, "Talent order has names the game does not use: " + string.Join(", ", notInGame));
+        Check(tree.All(t => talents.Contains(t, StringComparer.OrdinalIgnoreCase)), "Talent order misses a game talent.");
+
+        var personal = new[] { "Guardian power", "Hero level up cost", "Raining gold", "Firestone effect",
+            "Tank specialization", "Damage specialization", "Healer specialization", "Fist fight", "Precision",
+            "Magic spells", "Rage heroes", "Mana heroes", "Energy heroes", "Attribute armor", "Attribute health",
+            "Attribute damage", "Firestone Finder", "All main attributes", "Miner", "Battle cry" };
+        var tree2 = RecommendedOrders.Split(RecommendedOrders.PersonalTree);
+        Check(tree2.OrderBy(x => x).SequenceEqual(personal.OrderBy(x => x)), "Personal tree order must use exactly the game's names.");
+        Check(tree2[0] == "Battle cry" && tree2[1] == "Miner", "Guide: Battle cry and Miner lead the personal tree.");
+
+        var exotic = RecommendedOrders.Split(RecommendedOrders.ExoticMerchant);
+        Check(exotic[0] == "Firestone Finder" && exotic[1] == "Raining gold", "Guide: Firestone Finder, then Raining gold.");
+        Check(RecommendedOrders.FirestoneResearch.StartsWith("14,16,13,7,") &&
+              RecommendedOrders.FirestoneResearch.EndsWith(",8,9"), "Firestone research: time cuts, gold, crit loot last.");
+    }
+
+    public static void TokenReserve()
+    {
+        var now = new DateTime(2026, 11, 15, 12, 0, 0);
+        TokenNeed.Now = () => now;
+        TokenNeed.Clear();
+        Check(TokenNeed.Current == 0, "No reserve before a war machine asks.");
+        TokenNeed.Request(1500);
+        TokenNeed.Request(900);
+        Check(TokenNeed.Current == 1500, "The largest request of a run is kept.");
+        now = now.AddHours(7);
+        Check(TokenNeed.Current == 0, "An old request expires so a stopped war machine task cannot hold tokens.");
+        TokenNeed.Request(600);
+        TokenNeed.Clear();
+        Check(TokenNeed.Current == 0, "A new war machine run starts clean.");
+        TokenNeed.Now = () => DateTime.Now;
+    }
+
+    public static void ChestKeepOptions()
+    {
+        Check(ChestKeep.Options(1).Length == 0, "The last single chest is kept.");
+        Check(ChestKeep.Options(5).SequenceEqual(new[] { "openx1" }), "A small last stack opens one at a time.");
+        Check(ChestKeep.Options(25).SequenceEqual(new[] { "openx10", "openx1" }), "A big last stack opens by ten.");
+        Check(ChestKeep.Options(11).All(o => o != "openxMax"), "Never open the whole last stack.");
     }
 
     public static void Chips()

@@ -541,6 +541,7 @@ public class WarMachineUpgradeTask : BotTask
     public override IEnumerator Execute()
     {
         NextRunTime = DateTime.Now.AddHours(1);
+        TokenNeed.Clear();
         var targets = Targets();
         if (targets.Count == 0)
         {
@@ -641,6 +642,8 @@ public class WarMachineUpgradeTask : BotTask
                     });
                     if (cost <= 0 || tokens < 0 || tokens < cost || !componentsOk || !Ui.Clickable(button))
                     {
+                        // Parts are in but tokens are short: ask the personal tree to leave this many alone.
+                        if (componentsOk && cost > 0 && tokens >= 0 && tokens < cost) TokenNeed.Request(cost);
                         levelOutcome = PriorityTierAction.Wait;
                         break;
                     }
@@ -1075,7 +1078,16 @@ public class PersonalTreeTask : BotTask
         RecommendedOrders.Adopt(c, _priority);
         _keepTokens = c.CreateEntry("keep_tokens", 0, "Tokens To Keep",
             "Expedition tokens to leave unspent (war machine levels use them too).");
+        _warMachinesFirst = c.CreateEntry("war_machines_first", true, "War Machines First",
+            "Guide order: war machine levels get expedition tokens first. When a machine has its parts but not " +
+            "enough tokens, the tree leaves that many tokens alone.");
     }
+
+    private MelonPreferences_Entry<bool> _warMachinesFirst;
+
+    /// <summary>Tokens the tree must leave: the player's reserve plus what a war machine is waiting for.</summary>
+    private double Reserve =>
+        _keepTokens.Value + (_warMachinesFirst?.Value == true ? TokenNeed.Current : 0);
 
     public override IEnumerator Execute()
     {
@@ -1083,9 +1095,9 @@ public class PersonalTreeTask : BotTask
         yield return Ui.OpenGuildBuilding("treeOfLife");
         yield return Ui.Click(T + "/submenuButtons/personalTree", 1.5f);
         if (!Ui.Visible(Nodes)) yield break;
-        if (Ui.NumberAt(Tokens) <= _keepTokens.Value)
+        if (Ui.NumberAt(Tokens) <= Reserve)
         {
-            Logger.Info($"[Personal Tree] Skipping upgrade previews: tokens {Ui.NumberAt(Tokens)}, reserve {_keepTokens.Value}.");
+            Logger.Info($"[Personal Tree] Skipping upgrade previews: tokens {Ui.NumberAt(Tokens)}, reserve {Reserve}.");
             yield return Ui.Click(T + "/closeButton");
             yield break;
         }
@@ -1095,7 +1107,7 @@ public class PersonalTreeTask : BotTask
         const string scope = "personal-tree";
         foreach (var node in Ui.VisibleChildren(Nodes).Where(n => n.name.StartsWith("treeOfLifePersonalUpgrade")).ToList())
         {
-            if (NodeBuyer.CanSkip(node, Ui.NumberAt(Tokens) - _keepTokens.Value,
+            if (NodeBuyer.CanSkip(node, Ui.NumberAt(Tokens) - Reserve,
                     retryUnaffordableAfterCooldown: false, scope: scope))
             {
                 if (NodeBuyer.TryGetKnown(node, out var knownMaxed, out var knownCost, out var knownName, scope) &&
@@ -1192,7 +1204,7 @@ public class PersonalTreeTask : BotTask
             for (; purchases < 5; purchases++)
             {
                 var cost = Ui.NumberAt(Buy + "/cost");
-                if (cost <= 0 || Ui.NumberAt(Tokens) - _keepTokens.Value < cost || !Ui.Clickable(Buy)) break;
+                if (cost <= 0 || Ui.NumberAt(Tokens) - Reserve < cost || !Ui.Clickable(Buy)) break;
                 var levelBefore = Ui.Text(Preview + "/upgradeLevelText");
                 var tokensBefore = Ui.NumberAt(Tokens);
                 var changed = false;
@@ -1223,7 +1235,7 @@ public class PersonalTreeTask : BotTask
             var action = !finalMaxed && Ui.Find(Buy) == null
                 ? PriorityTierAction.Wait
                 : PriorityTier.AfterPass(finalMaxed, available, purchases >= 5,
-                    Ui.Clickable(Buy), finalCost, Ui.NumberAt(Tokens) - _keepTokens.Value);
+                    Ui.Clickable(Buy), finalCost, Ui.NumberAt(Tokens) - Reserve);
             NodeBuyer.Remember(up.node, finalMaxed, finalMaxed || !available ? 0 : finalCost, up.name, scope);
             yield return Ui.Click(Preview + "/closeButton", 0.6f);
             if (missingCurrency || action != PriorityTierAction.Advance)

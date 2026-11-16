@@ -54,6 +54,20 @@ public static class BotManager
         return true;
     }
 
+    /// <summary>Queues an enabled task to run at the scheduler's next pick, ignoring its timer (F2 "Run").</summary>
+    internal static bool RunTaskNow(BotTask task)
+    {
+        if (task == null || !Tasks.Contains(task) || !task.IsEnabled) return false;
+        task.RequestRunNow();
+        Logger.Info($"[Bot] {task.SectionTitle} queued to run now from F2.");
+        if (!IsRunning)
+        {
+            Logger.Info("[Bot] Bot was stopped; starting it so the task runs.");
+            Start();
+        }
+        return true;
+    }
+
     public static bool ShouldPauseAutoUpgrade() => IsRunning && (_shouldPauseAutoUpgrade || IsTaskExecuting);
 
     /// <summary>Why AutoUpgrade is paused right now, for its long-pause warning.</summary>

@@ -57,7 +57,7 @@ enable it once in F1 or press its hotkey to retry. An empty skill combo cannot s
 | Key | Action |
 |-----|--------|
 | **F1** | Settings panel (turn features on or off, set priorities) |
-| **F2** | Task status (what runs next and when); click a task's ON/OFF switch to change its F1 setting |
+| **F2** | Task status (what runs next and when); click a task's ON/OFF switch to change its F1 setting, or **RUN** to run it right now (starts the bot if it is stopped) |
 | **F4** | War Machine Planner (opens in your browser) |
 | **F6** | Hero auto-upgrade on / off (on by default: every minute it opens upgrades, buys to the next milestone or Max, and closes the menu again) |
 | **F7** | Start / stop the bot |
@@ -68,7 +68,7 @@ enable it once in F1 or press its hotkey to retry. An empty skill combo cannot s
 
 Every feature can be switched on or off in the F1 panel.
 
-Priority lists (talents, Oracle, Personal Tree, Forbidden Knowledge, research, Exotic Merchant, event exchange) ship in the order the community guides recommend: Aurora's Steam Complete Guide, the Steam War Machine guide, the Firestone Fandom wiki and firestone-idle-rpg.de. Talents start with Battle cry and Fate. Locked upgrades are skipped until you unlock them. Each ordered list in F1 has **Clear** and **Recommended** buttons, so you can start from scratch or go back to the guide order.
+Priority lists (talents, Oracle, Personal Tree, Forbidden Knowledge, research, Exotic Merchant, event exchange) ship in the order the community guides recommend: Aurora's Steam Complete Guide, the Steam War Machine guide, the Firestone Fandom wiki and firestone-idle-rpg.de. Orders were re-checked against Aurora's guide (October 2026) and use the game's own upgrade names. War machine levels get expedition tokens before the Personal Tree, map missions run shortest first, and one chest is kept back for the daily quest. Locked upgrades are skipped until you unlock them. Each ordered list in F1 has **Clear** and **Recommended** buttons, so you can start from scratch or go back to the guide order.
 
 | Area | Automated |
 |------|-----------|

@@ -1,5 +1,20 @@
 ﻿# Changelog
 
+## 0.7.63 (2026-11-15)
+- **Run any task now from F2.** Every task in F2 has a **RUN** button next to its ON/OFF switch. It skips the task's timer and bubble cooldown so the bot runs it next. If the bot was stopped, RUN starts it.
+- **Priority orders re-checked against Aurora's Steam Complete Guide** (October 2026 update) and the game's own upgrade names:
+  - **Talents** now start with the two one-point auto-ability talents, then Librarian, Alchemy, Twin dragons, Battle cry, Fate, Expeditioner, Trainer Skills, Coworkers, Meteorite hunter and Raining gold. Crit, Weaklings, Powerless, Dodge, Expose Weakness and Guardian power come last. The old list named talents the game doesn't have ("Party - Auto Abilities", "Attribute damage/health/armor"), so those entries never did anything; the party one is **Auto attacks** in game.
+  - **Firestone Research:** research-time cuts first (Trainer skills, Expeditioner), then Firestone Finder and Raining gold. Critical loot moves last.
+  - **Meteorite Research:** research time, Raining gold and Firestone effect first.
+  - **Exotic Merchant:** Firestone Finder first, then Raining gold.
+  - **Personal Tree:** Battle cry and Miner first, then Firestone Finder and Raining gold. The list now uses the game's names (adds Miner and the hero-type upgrades; drops "Prestigious" and "Guardian", which don't exist there).
+  - **Oracle:** Fate, then Firestone Finder and Raining gold. Removed blessing names the game doesn't have.
+- Lists you never edited move to the new order once on this update. **Lists you changed are left alone**; tap **Recommended** in F1 to switch.
+- **War machines get expedition tokens first** (guide order). When a war machine has its parts but not enough tokens, the Personal Tree leaves that many tokens alone. Turn off **F1 > Personal Tree > War Machines First** to go back to the old behaviour.
+- **One chest kept for the daily quest.** Open Chests leaves the last chest unopened so tomorrow's "open chests" daily quest always has one. Turn off **Keep One For Daily Quest** to open everything.
+- **Map missions run shorter missions first** (guide advice). Players still on the old default switch once; pick "desc" in F1 for longest first.
+- Not changed: the bot already never spends gems, which matches the guide's "never spend gems on chests or scrolls".
+
 ## 0.7.62 (2026-11-13)
 - F4's Void Crystal advisor now defaults to **Balanced gear - rings first** for both recommendations and Spend for me. It balances next-upgrade costs across the roster, weighting rings four times higher; at the 4x boundary, cheaper gear catches up.
 - Selecting a hero limits this strategy to their gear. Existing damage, health, armor, gold and gear-power goals remain available. Balanced priority is a cost rule, not a predicted stat gain or combat simulation.

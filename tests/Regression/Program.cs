@@ -107,6 +107,9 @@ internal static class Program
             Test("spending selects bound unlocked heroes in reordered and sparse rosters without unsafe arrows", VoidCrystalTests.HeroSelectionSafety);
         Test("Guide priority orders match every panel chip exactly", RecommendedOrderTests.MatchRegistry);
         Test("Clear and Recommended chips empty or restore an ordered list", RecommendedOrderTests.Chips);
+            Test("war machines reserve expedition tokens from the personal tree", RecommendedOrderTests.TokenReserve);
+            Test("one chest is kept for the daily quest", RecommendedOrderTests.ChestKeepOptions);
+            Test("F2 run now makes a task due immediately", RunNowTests.MakesDue);
             Test("Void Crystal requests reject replays, changed sessions, tutorials and overlapping actions", VoidCrystalTests.RequestSafety);
             Test("meteorite research preserves the exact reserve instead of trusting rounded UI values", MeteoriteTests.Boundaries);
             Test("meteorite research rechecks live reserve, balance, price and selection at the click", MeteoriteTests.LiveGuard);

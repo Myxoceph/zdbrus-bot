@@ -29,10 +29,18 @@ public class MapMissionsTask : BotTask
 
         _timeOrder = category.CreateEntry(
             "mission_time_order",
-            "desc",
+            "asc",
             "Priority",
-            "Sort missions by time required. Use 'asc' (shorter first) or 'desc' (longer first)."
+            "Sort missions by time required. Use 'asc' (shorter first, the guide's advice) or 'desc' (longer first)."
         );
+        // 0.7.63: the guide runs short missions first. Move players still on the old default once.
+        if (BotSettings.TryMarkGuideOrderAdopted("map_missions/mission_time_order@aurora-2026-11") &&
+            string.Equals(_timeOrder.Value, "desc", StringComparison.OrdinalIgnoreCase))
+        {
+            _timeOrder.Value = "asc";
+            category.SaveToFile();
+            Logger.Info("[Settings] Map missions now run shorter missions first (guide order). Change it in F1.");
+        }
     }
 
     private const string Map = P.Menus + "/WorldMap";
@@ -191,7 +199,7 @@ public class MapMissionsTask : BotTask
         if (string.Equals(value, "asc", StringComparison.OrdinalIgnoreCase)) return true;
         if (string.Equals(value, "desc", StringComparison.OrdinalIgnoreCase)) return false;
 
-        Debug($"[FAILED] Invalid mission_time_order '{value}'. Using default 'desc'.");
+        Debug($"[FAILED] Invalid mission_time_order '{value}'. Using default 'asc'.");
         return false;
     }
 }

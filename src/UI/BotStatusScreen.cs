@@ -19,12 +19,18 @@ public static class BotStatusScreen
 {
     private sealed class StatusRowView
     {
-        public StatusRowView(TMP_Text[] cells, Button enabledButton, TMP_Text enabledLabel)
+        public StatusRowView(TMP_Text[] cells, Button enabledButton, TMP_Text enabledLabel, Button runButton,
+            TMP_Text runLabel)
         {
             Cells = cells;
             EnabledButton = enabledButton;
             EnabledLabel = enabledLabel;
+            RunButton = runButton;
+            RunLabel = runLabel;
         }
+
+        public Button RunButton { get; }
+        public TMP_Text RunLabel { get; }
 
         public TMP_Text[] Cells { get; }
         public Button EnabledButton { get; }
@@ -40,11 +46,11 @@ public static class BotStatusScreen
     private const int SortingOrder = 9990;
     private const float RefreshInterval = 1f;
 
-    private static readonly string[] ColumnTitles = { "Task", "On", "Status", "Time Left", "Next Run", "Last Run" };
+    private static readonly string[] ColumnTitles = { "Task", "On", "Run", "Status", "Time Left", "Next Run", "Last Run" };
 
     // Proportions, not pixels. The On column fits the shared F1-style switch; the remaining columns
     // retain room for the longest task name, status, duration, and timestamps.
-    private static readonly float[] ColumnRatios = { 0.285f, 0.08f, 0.145f, 0.145f, 0.175f, 0.17f };
+    private static readonly float[] ColumnRatios = { 0.25f, 0.075f, 0.075f, 0.135f, 0.13f, 0.17f, 0.165f };
 
     /// <summary>Buffer reused between refreshes: once per second with no new list allocated.</summary>
     private static readonly List<TaskStatusRow> Buffer = new();
@@ -220,7 +226,18 @@ public static class BotStatusScreen
             var enabledLabel = UiFactory.CreateLabel(enabledButton.transform, string.Empty,
                 UiTheme.ChipFontSize, UiTheme.Text, TextAlignmentOptions.Center);
             UiFactory.Stretch(enabledLabel.rectTransform, 4f);
-            Rows.Add(new StatusRowView(cells, enabledButton, enabledLabel));
+            var runButton = UiFactory.CreateButton($"run{rowIndex}", row.rectTransform, string.Empty,
+                UiTheme.Button, () => RunTask(rowIndex), UiTheme.ChipFontSize);
+            var runRect = runButton.GetComponent<RectTransform>();
+            var runLeft = ColumnRatios[0] + ColumnRatios[1];
+            runRect.anchorMin = new Vector2(runLeft, 0f);
+            runRect.anchorMax = new Vector2(runLeft + ColumnRatios[2], 1f);
+            runRect.offsetMin = new Vector2(3f, 3f);
+            runRect.offsetMax = new Vector2(-3f, -3f);
+            var runLabel = UiFactory.CreateLabel(runButton.transform, "RUN",
+                UiTheme.ChipFontSize, UiTheme.Text, TextAlignmentOptions.Center);
+            UiFactory.Stretch(runLabel.rectTransform, 4f);
+            Rows.Add(new StatusRowView(cells, enabledButton, enabledLabel, runButton, runLabel));
             y += UiTheme.StatusRowHeight + UiTheme.RowSpacing;
         }
 
@@ -287,16 +304,19 @@ public static class BotStatusScreen
             {
                 for (var c = 0; c < cells.Length; c++) SetText(cells[c], string.Empty, UiTheme.TextMuted);
                 SetTaskSwitch(rowView, false, false);
+                rowView.RunButton.interactable = false;
                 continue;
             }
 
             var row = Buffer[i];
             SetText(cells[0], row.Name, UiTheme.Text);
-            SetText(cells[2], row.Status, StatusColor(row.Status));
-            SetText(cells[3], row.TimeLeft, UiTheme.Text);
-            SetText(cells[4], FormatCompact(row.NextRun), UiTheme.Text);
-            SetText(cells[5], FormatCompact(row.LastRun), UiTheme.TextMuted);
+            SetText(cells[3], row.Status, StatusColor(row.Status));
+            SetText(cells[4], row.TimeLeft, UiTheme.Text);
+            SetText(cells[5], FormatCompact(row.NextRun), UiTheme.Text);
+            SetText(cells[6], FormatCompact(row.LastRun), UiTheme.TextMuted);
             SetTaskSwitch(rowView, row.Task.IsEnabled);
+            rowView.RunButton.interactable = row.Task.IsEnabled;
+            SetText(rowView.RunLabel, "RUN", row.Task.IsEnabled ? UiTheme.Text : UiTheme.TextMuted);
         }
     }
 
@@ -311,6 +331,15 @@ public static class BotStatusScreen
             return;
         }
 
+        Refresh();
+    }
+
+    private static void RunTask(int rowIndex)
+    {
+        if ((uint)rowIndex >= (uint)Buffer.Count) return;
+        var task = Buffer[rowIndex].Task;
+        if (!BotManager.RunTaskNow(task))
+            Logger.Warning($"[UI] {task.SectionTitle} is off; turn it on before running it from F2.");
         Refresh();
     }
 

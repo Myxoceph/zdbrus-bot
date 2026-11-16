@@ -45,6 +45,14 @@ public abstract class BotTask
     /// <summary>Puts back a due time saved before the game was closed.</summary>
     public void RestoreNextRun(DateTime when) => NextRunTime = when;
 
+    /// <summary>Makes the task due right now: clears its timer and any bubble cooldown (F2 "Run" button).</summary>
+    internal void RequestRunNow()
+    {
+        NextRunTime = DateTime.MinValue;
+        BubbleQuietUntil = DateTime.MinValue;
+        BubbleIdleStreak = 0;
+    }
+
     internal virtual IEnumerable<KeyValuePair<string, DateTime>> RetryDeadlines
         => Array.Empty<KeyValuePair<string, DateTime>>();
 

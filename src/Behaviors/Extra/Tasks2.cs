@@ -913,7 +913,11 @@ public class OpenChestsTask : BotTask
                 "Tick to let the bot open this chest type (game id: " + id + "). Untick to keep them.");
         _openMysteryBoxes = c.CreateEntry("open_mysterybox", true, "Open Mystery Boxes",
             "Tick to let the bot open the free Mystery Boxes in your Bag. Untick to keep them.");
+        _keepForDaily = c.CreateEntry("keep_one_for_daily", true, "Keep One For Daily Quest",
+            "Guide tip: leaves one chest unopened so tomorrow's \"open chests\" daily quest always has one.");
     }
+
+    private MelonPreferences_Entry<bool> _keepForDaily;
 
     public override IEnumerator Execute()
     {
@@ -978,10 +982,33 @@ public class OpenChestsTask : BotTask
                 continue;
             }
 
+            // Keep one chest for the next daily quest: only the last eligible stack is touched, and it is opened
+            // in steps that always leave at least one behind.
+            var options = new[] { "openxMax", "openx10", "openx1" };
+            if (_keepForDaily?.Value == true)
+            {
+                var others = Ui.VisibleChildren(Content).Count(t => t.name != name &&
+                    SupportedChests.Contains(t.name) && !skip.Contains(t.name.ToLowerInvariant()) &&
+                    Ui.NumberOf(t.Find("quantity")) > 0);
+                if (others == 0)
+                {
+                    var plan = ChestKeep.Options(beforeQuantity);
+                    if (plan.Length == 0)
+                    {
+                        Logger.Info($"[Chests] Keeping the last {name} chest for tomorrow's daily quest.");
+                        skip.Add(name.ToLowerInvariant());
+                        kept[name] = "saved for the daily quest";
+                        yield return Ui.Click(Preview + "/closeButton", 0.6f);
+                        continue;
+                    }
+                    options = plan;
+                }
+            }
+
             Transform open = null;
             for (var attempt = 0; attempt < 20 && open == null; attempt++)
             {
-                foreach (var option in new[] { "openxMax", "openx10", "openx1" })
+                foreach (var option in options)
                 {
                     var b = Ui.Find(Preview + "/openingOptions/" + option);
                     if (Ui.Clickable(b) && b.Find("chestIcon") != null && b.Find("chestIcon").gameObject.activeInHierarchy)
