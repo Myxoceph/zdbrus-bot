@@ -401,6 +401,7 @@ namespace Firebot.Core
     public static class ScreenMap { public static void Tick() { } }
     public static class DropCollector { public static void Tick() { } }
     public static class BubbleWatcher { public static void Tick() { } }
+    public static class GameDiagnostics { public static void Tick() { } }
     public static class Watchdog
     {
         public static IEnumerator ForceClearAll(string phase = null) { yield break; }

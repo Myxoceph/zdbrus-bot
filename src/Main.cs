@@ -114,6 +114,7 @@ public class Main : MelonMod
             }
             DropCollector.Tick();
             BubbleWatcher.Tick();
+            GameDiagnostics.Tick();
             BotPanel.Tick();
             BotStatusScreen.Tick();
         }
