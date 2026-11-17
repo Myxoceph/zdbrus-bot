@@ -2,8 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-#if !MONO
+#if MONO
+using BreakInfinity;
+#else
 using Il2Cpp;
+using Il2CppBreakInfinity;
 #endif
 
 namespace Firebot.Core;
@@ -52,8 +55,8 @@ internal static class GameDiagnostics
     {
         var m = GameInitialize.MenuLoader?.templeOfEternalsMech;
         if (m == null) return "temple: not loaded";
-        return $"temple: prestigeRainingGold {m.prestigeRainingGold} | prestigeFirestones {m.prestigeFirestones} | " +
-               $"epicPrestigeRainingGold {m.epicPrestigeRainingGold} | epicPrestigeFirestones {m.epicPrestigeFirestones}";
+        return $"temple: prestigeRainingGold {Big(m.prestigeRainingGold)} | prestigeFirestones {Big(m.prestigeFirestones)} | " +
+               $"epicPrestigeRainingGold {Big(m.epicPrestigeRainingGold)} | epicPrestigeFirestones {Big(m.epicPrestigeFirestones)}";
     }
 
     private static string Enemies()
@@ -62,7 +65,10 @@ internal static class GameDiagnostics
             .Where(e => e != null && e.gameObject.activeInHierarchy && e.battleCharacter != null).ToList();
         if (enemies.Count == 0) return "enemies: none active";
         var listed = enemies.Take(MaxEnemiesListed).Select(e =>
-            $"{e.name} {e.battleCharacter.currentHealth}/{e.battleCharacter.maximumHealthTotal}");
+            $"{e.name} {Big(e.battleCharacter.currentHealth)}/{Big(e.battleCharacter.maximumHealthTotal)}");
         return $"enemies ({enemies.Count}): {string.Join(" | ", listed)}";
     }
+
+    // The game keeps these numbers in anti-cheat ObscuredBigDouble, whose ToString shows only the type name.
+    private static string Big(BigDouble value) => value.ToString();
 }
