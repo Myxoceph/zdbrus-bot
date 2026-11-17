@@ -27,7 +27,8 @@ internal abstract class UiRow
     public static UiRow Create(ConfigEntry config, RectTransform rowRect)
     {
         if (config.Kind == ConfigEntryKind.Int &&
-            (config.Key == "temple_prestige/min_gain_percent" || config.Key == "temple_prestige/efficiency_percent"))
+            (config.Key == "temple_prestige/min_gain_percent" || config.Key == "temple_prestige/efficiency_percent" ||
+             config.Key == "auto_upgrade/myxo_max_until_wave"))
             return new PreciseIntegerRow(config, rowRect);
 
         switch (config.Kind)

@@ -43,8 +43,14 @@ internal sealed class PreciseIntegerRow : UiRow
         input.characterLimit = 10;
         input.SetTextWithoutNotify(config.ReadInt().ToString(CultureInfo.InvariantCulture));
 
-        var hintText = config.Key.EndsWith("efficiency_percent", StringComparison.Ordinal)
-            ? "0 disables this trigger" : "0 removes the minimum";
+        // The prestige entries accept any non-negative number; the Myxo wave keeps to its declared range.
+        var bounded = config.Key.EndsWith("myxo_max_until_wave", StringComparison.Ordinal);
+        var min = bounded ? (int)config.Range.Min : 0;
+        var max = bounded ? (int)config.Range.Max : int.MaxValue;
+        var hintText = bounded
+            ? "Max below this wave, Next milestone from it"
+            : config.Key.EndsWith("efficiency_percent", StringComparison.Ordinal)
+                ? "0 disables this trigger" : "0 removes the minimum";
         var hint = UiFactory.CreateLabel(RowRect, hintText, UiTheme.ChipFontSize, UiTheme.TextMuted,
             TextAlignmentOptions.Left);
         hint.rectTransform.anchorMin = new Vector2(LabelRatio + 0.03f, 0f);
@@ -54,7 +60,8 @@ internal sealed class PreciseIntegerRow : UiRow
 
         input.onEndEdit.AddListener((Action<string>)(value =>
         {
-            if (int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) && number >= 0)
+            if (int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) &&
+                number >= min && number <= max)
             {
                 config.Write(number);
                 hint.text = hintText;
@@ -62,7 +69,7 @@ internal sealed class PreciseIntegerRow : UiRow
                 return;
             }
 
-            hint.text = "Enter a whole number from 0 to 2147483647.";
+            hint.text = $"Enter a whole number from {min} to {max}.";
             hint.color = UiTheme.Danger;
         }));
     }
