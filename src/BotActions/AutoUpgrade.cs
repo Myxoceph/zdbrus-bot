@@ -21,8 +21,8 @@ public static class AutoUpgrade
     private const float IdlePollSeconds = 0.5f;
     private const int FocusBurstLimit = 20;
 
-    /// <summary>Default wave below which the "myxo" mode buys Max; Next milestone from it on.</summary>
-    private const int DefaultMyxoMaxUntilWave = 300;
+    /// <summary>Default stage below which the "myxo" mode buys Max; Next milestone from it on.</summary>
+    private const int DefaultMyxoMaxUntilStage = 300;
 
     private static readonly WaitForSeconds GapBetweenButtonsWait = new(GapBetweenButtonsSeconds);
     private static readonly WaitForSeconds IdlePollWait = new(IdlePollSeconds);
@@ -40,7 +40,7 @@ public static class AutoUpgrade
     private static MelonPreferences_Entry<string> _upgradeMode;
     private static MelonPreferences_Entry<string> _priorityMode;
     private static MelonPreferences_Entry<int> _everySeconds;
-    private static MelonPreferences_Entry<int> _myxoMaxUntilWave;
+    private static MelonPreferences_Entry<int> _myxoMaxUntilStage;
 
     /// <summary>Game mode last selected in the open menu, so a mode change is applied without reopening it.</summary>
     private static string _appliedMode;
@@ -102,14 +102,14 @@ public static class AutoUpgrade
             "milestone",
             "Upgrade Mode",
             "How many levels each press buys: milestone (up to the next milestone, the best value), max (as many as you can afford), " +
-            "myxo (max until the Myxo wave, then milestone), x100, x25, x10 or x1."
+            "myxo (max until the Myxo stage, then milestone), x100, x25, x10 or x1."
         );
 
-        _myxoMaxUntilWave = section.CreateEntry(
-            "myxo_max_until_wave",
-            DefaultMyxoMaxUntilWave,
-            "Myxo: Max Until Wave",
-            $"With Upgrade Mode set to Myxo, buy with Max below this wave and with Next milestone from it on. Default: {DefaultMyxoMaxUntilWave}."
+        _myxoMaxUntilStage = section.CreateEntry(
+            "myxo_max_until_stage",
+            DefaultMyxoMaxUntilStage,
+            "Myxo: Max Until Stage",
+            $"With Upgrade Mode set to Myxo, buy with Max below this stage and with Next milestone from it on. Default: {DefaultMyxoMaxUntilStage}."
         );
 
         _priorityMode = section.CreateEntry(
@@ -336,7 +336,7 @@ public static class AutoUpgrade
 
     /// <summary>
     ///     The game mode to select for the configured Upgrade Mode. "myxo" is Max below the
-    ///     "Myxo: Max Until Wave" setting and Next milestone from it on; an unreadable wave counts as
+    ///     "Myxo: Max Until Stage" setting and Next milestone from it on; an unreadable stage counts as
     ///     milestone, so gold is never spent on Max on a guess.
     /// </summary>
     private static string EffectiveUpgradeMode()
@@ -344,13 +344,13 @@ public static class AutoUpgrade
         var mode = (_upgradeMode?.Value ?? "milestone").Trim().ToLowerInvariant();
         if (mode != "myxo") return mode;
 
-        var known = PlayerStats.TryGetCurrentStage(out var wave);
-        var limit = _myxoMaxUntilWave?.Value ?? DefaultMyxoMaxUntilWave;
-        var effective = known && wave < limit ? "max" : "milestone";
+        var known = PlayerStats.TryGetCurrentStage(out var stage);
+        var limit = _myxoMaxUntilStage?.Value ?? DefaultMyxoMaxUntilStage;
+        var effective = known && stage < limit ? "max" : "milestone";
         if (effective != _appliedMode)
             Logger.Info(known
-                ? $"[AutoUpgrade] Myxo: wave {wave} (Max until {limit}), using {(effective == "max" ? "Max" : "Next milestone")}."
-                : "[AutoUpgrade] Myxo: wave unreadable, using Next milestone.");
+                ? $"[AutoUpgrade] Myxo: stage {stage} (Max until {limit}), using {(effective == "max" ? "Max" : "Next milestone")}."
+                : "[AutoUpgrade] Myxo: stage unreadable, using Next milestone.");
         return effective;
     }
 
@@ -373,7 +373,7 @@ public static class AutoUpgrade
         }
         else
         {
-            // The menu can stay open across cycles; apply a mode change (myxo crossing its wave) in place.
+            // The menu can stay open across cycles; apply a mode change (myxo crossing its stage) in place.
             var mode = EffectiveUpgradeMode();
             if (mode != _appliedMode)
             {
