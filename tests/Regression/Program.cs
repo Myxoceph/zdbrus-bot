@@ -44,6 +44,7 @@ internal static class Program
             Test("prestige timer fallback supports the 30-minute option", PrestigeTimerFallback);
             Test("prestige task refuses uncertain or changed game state", PrestigeTaskSafety);
             Test("boss retry threshold can use an already-open free preview", PrestigeBossRetryTrigger);
+            Test("one boss attempt resets after the first lost boss only", PrestigeSingleBossAttempt);
             Test("prestige task waits for two slow growth samples", PrestigeTaskGrowth);
             Test("zero prestige boost waits for hourly sampling without blocking boss checks", PrestigeZeroGainSampling);
             Test("blocked prestige previews preserve the hourly sample and retry safely", PrestigeBlockedPreview);
@@ -650,6 +651,23 @@ internal static class Program
             "The boss retry trigger did not use the already-open free preview.");
         Check(TemplePrestigeTask.LastDecision.Contains("Prestige confirmed"),
             "Boss-triggered prestige was not confirmed.");
+    }
+
+    private static void PrestigeSingleBossAttempt()
+    {
+        var fixture = SetupPrestige(stalled: false);
+        ((MelonPreferences_Entry<int>)fixture.Settings["boss_attempts"]).Value = 1;
+        Run(fixture.Task.Execute());
+        Check(fixture.FreeClicks == 0 && TemplePrestigeTask.LastDecision.Contains("Waiting"),
+            "One boss attempt reset without a lost boss.");
+
+        fixture = SetupPrestige(stalled: false);
+        ((MelonPreferences_Entry<int>)fixture.Settings["boss_attempts"]).Value = 1;
+        GameObject.CreatePath(P.Battle + "/rightSideUI/fightBossButton").AddComponent<Button>();
+        Run(fixture.Task.Execute());
+        Check(fixture.FreeClicks == 1 && fixture.PaidClicks == 0 && fixture.ConfirmClicks == 1 &&
+              TemplePrestigeTask.LastDecision.Contains("Prestige confirmed"),
+            "One boss attempt did not reset after a lost boss.");
     }
 
     private static void PrestigeTaskGrowth()

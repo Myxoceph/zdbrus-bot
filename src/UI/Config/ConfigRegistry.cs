@@ -81,7 +81,7 @@ internal static class ConfigRegistry
         ["meteorite_research/keep_meteorites"] = new NumberRange(0f, 100000f, true),
         ["temple_prestige/min_gain_percent"] = new NumberRange(0f, 100000f, true),
         ["temple_prestige/stall_minutes"] = new NumberRange(30f, 60f, true),
-        ["temple_prestige/boss_attempts"] = new NumberRange(2f, 5f, true),
+        ["temple_prestige/boss_attempts"] = new NumberRange(1f, 5f, true),
         ["temple_prestige/min_hours_played"] = new NumberRange(0f, 72f, true),
         ["temple_prestige/efficiency_percent"] = new NumberRange(0f, 200f, true),
         ["event_exchange/keep_currency"] = new NumberRange(0f, 100000f, true),
@@ -144,6 +144,7 @@ internal static class ConfigRegistry
         },
         ["temple_prestige/boss_attempts"] = new[]
         {
+            new ConfigChoice("1", "1 attempt"),
             new ConfigChoice("2", "2 attempts"),
             new ConfigChoice("3", "3 attempts"),
             new ConfigChoice("4", "4 attempts"),
@@ -481,7 +482,7 @@ internal static class ConfigRegistry
             "The minimum boost and run age still apply.",
 
         ["temple_prestige/boss_attempts"] =
-            "Reset after this many boss attempts at the same stage, if the minimum boost and run age are met.",
+            "Reset after this many boss attempts at the same stage (1 = right after the first lost boss), if the minimum boost and run age are met.",
 
         ["temple_prestige/min_gain_percent"] =
             "Minimum extra gold boost on the free empower preview. 0 removes the minimum.\n" +

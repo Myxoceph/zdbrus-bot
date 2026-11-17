@@ -31,6 +31,9 @@ public class TemplePrestigeTask : BotTask
     private const string ConfirmationMessage = Confirmation + "/bg/messageText";
     private const string ConfirmEmpower = Confirmation + "/bg/confirmButton";
     private const string EmpowerQuestion = "Are you sure that you want to empower the temple?";
+
+    // Same button as BossRetryTask: the game shows it only after a lost boss fight, while it farms the stage.
+    private const string BossFight = P.Battle + "/rightSideUI/fightBossButton";
     private MelonPreferences_Entry<int> _stallMinutes;
     private MelonPreferences_Entry<int> _bossAttempts;
     private MelonPreferences_Entry<int> _minGain;
@@ -55,7 +58,7 @@ public class TemplePrestigeTask : BotTask
         _stallMinutes = c.CreateEntry("stall_minutes", 30, "Fallback Stall Timer",
             "Fallback reset delay after no new highest stage.");
         _bossAttempts = c.CreateEntry("boss_attempts", 3, "Boss Attempts Before Reset",
-            "Reset after this many boss attempts at the same stage.");
+            "Reset after this many boss attempts at the same stage. 1 resets right after the first lost boss.");
         _minGain = c.CreateEntry("min_gain_percent", 100, "Minimum Gold Boost %",
             "Never empower for less than this extra gold (the +% the temple shows).");
         _minHours = c.CreateEntry("min_hours_played", 1, "Minimum Hours In Run", "Never empower a run younger than this.");
@@ -156,7 +159,7 @@ public class TemplePrestigeTask : BotTask
             Logger.Warning("Temple: a confirmation was already open; no prestige action attempted.");
             yield break;
         }
-        if (_stallMinutes.Value is < 30 or > 60 || _bossAttempts.Value is < 2 or > 5 ||
+        if (_stallMinutes.Value is < 30 or > 60 || _bossAttempts.Value is < 1 or > 5 ||
             _minGain.Value < 0 || _minHours.Value < 0 || _efficiency.Value < 0)
         {
             InvalidateRate();
@@ -178,12 +181,15 @@ public class TemplePrestigeTask : BotTask
 
         var isStalled = stalled >= _stallMinutes.Value / 60d;
         var bossAttempts = BossAttemptTracker.CountAtStage(stage);
-        var bossRetriesReached = bossAttempts >= _bossAttempts.Value;
+        // With 1, one lost boss is enough: no retry has to be pressed (or counted) first.
+        var bossLost = _bossAttempts.Value == 1 && Ui.Clickable(BossFight);
+        var bossRetriesReached = bossAttempts >= _bossAttempts.Value || bossLost;
         var hasSampleTime = DateTime.TryParse(_lastGainAt.Value, CultureInfo.InvariantCulture,
             DateTimeStyles.RoundtripKind, out var sampledAt);
         var sampleDue = _efficiency.Value > 0 && (!hasSampleTime || sampledAt > DateTime.Now ||
                         DateTime.Now - sampledAt >= TimeSpan.FromHours(1));
-        var stageReading = $"Stage {stage} | {stalled:0.0}h without a new best | boss tries {bossAttempts}/{_bossAttempts.Value}";
+        var stageReading = $"Stage {stage} | {stalled:0.0}h without a new best | boss tries {bossAttempts}/{_bossAttempts.Value}" +
+                           (bossLost ? " (boss lost)" : "");
         if (!isStalled && !sampleDue && !bossRetriesReached)
         {
             Report("Waiting for progress or the next growth sample.", stageReading);
