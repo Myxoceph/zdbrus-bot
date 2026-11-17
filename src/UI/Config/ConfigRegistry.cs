@@ -88,7 +88,10 @@ internal static class ConfigRegistry
         ["event_exchange/keep_currency"] = new NumberRange(0f, 100000f, true),
         ["auto_upgrade/every_seconds"] = new NumberRange(10f, 600f, true),
         ["auto_upgrade/myxo_max_until_stage"] = new NumberRange(1f, 100000f, true),
-        ["boss_retry/every_minutes"] = new NumberRange(1f, 60f, true)
+        ["boss_retry/every_minutes"] = new NumberRange(1f, 60f, true),
+        ["smart_farm/max_wave_seconds"] = new NumberRange(1f, 120f, true),
+        ["smart_farm/boss_margin_percent"] = new NumberRange(0f, 200f, true),
+        ["smart_farm/dps_factor_percent"] = new NumberRange(1f, 100f, true)
     };
 
     /// <summary>

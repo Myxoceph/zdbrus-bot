@@ -16,6 +16,7 @@
     <Compile Include="..\..\src\Utilities\StringUtils.cs" Link="StringUtils.cs" />
     <Compile Include="..\..\src\Core\PlayerStats.cs" Link="PlayerStats.cs" />
     <Compile Include="..\..\src\Core\BossAttemptTracker.cs" Link="BossAttemptTracker.cs" />
+    <Compile Include="..\..\src\Core\SmartFarmPolicy.cs" Link="SmartFarmPolicy.cs" />
     <Compile Include="..\..\src\Core\ScarabSpinPolicy.cs" Link="ScarabSpinPolicy.cs" />
     <Compile Include="..\..\src\Core\PriorityTier.cs" Link="PriorityTier.cs" />
     <Compile Include="..\..\src\Core\BattlePassPolicy.cs" Link="BattlePassPolicy.cs" />

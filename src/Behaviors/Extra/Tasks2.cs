@@ -1132,6 +1132,7 @@ public class BossRetryTask : BotTask
     public override IEnumerator Execute()
     {
         NextRunTime = DateTime.Now.AddMinutes(Math.Max(1, _minutes.Value));
+        if (SmartFarmTask.Active) yield break; // Smart Farm decides when the boss is worth a try.
         if (!Ui.Clickable(Fight)) yield break;
         var stageKnown = PlayerStats.TryGetCurrentStage(out var stage);
         if (!stageKnown)

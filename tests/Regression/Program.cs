@@ -46,6 +46,8 @@ internal static class Program
             Test("boss retry threshold can use an already-open free preview", PrestigeBossRetryTrigger);
             Test("one boss attempt resets after the first lost boss only", PrestigeSingleBossAttempt);
             Test("target mode empowers on the live boost only", PrestigeTargetMode);
+            Test("smart farm reads the battle screen numbers", SmartFarmParsing);
+            Test("smart farm farms where damage clears waves and fights reachable bosses", SmartFarmDecisions);
             Test("prestige task waits for two slow growth samples", PrestigeTaskGrowth);
             Test("zero prestige boost waits for hourly sampling without blocking boss checks", PrestigeZeroGainSampling);
             Test("blocked prestige previews preserve the hourly sample and retry safely", PrestigeBlockedPreview);
@@ -719,6 +721,47 @@ internal static class Program
         Check(fixture.FreeClicks == 1 && fixture.PaidClicks == 0 && fixture.ConfirmClicks == 1 &&
               TemplePrestigeTask.LastDecision.Contains("Prestige confirmed"),
             "Target mode did not empower once the live boost and the preview reached the target.");
+    }
+
+    private static void SmartFarmParsing()
+    {
+        Check(SmartFarmPolicy.TryParseScreenNumber("DPS: 1.0e201", out var dps) && Math.Abs(dps / 1e201 - 1) < 1e-9,
+            "Screen DPS was not read.");
+        Check(SmartFarmPolicy.TryParseScreenNumber("7.5e197 HP", out var hp) && Math.Abs(hp / 7.5e197 - 1) < 1e-9,
+            "Wave health was not read.");
+        Check(SmartFarmPolicy.TryParseScreenNumber("12.3K", out var k) && Math.Abs(k - 12300) < 1e-6,
+            "A K suffix was not read.");
+        Check(!SmartFarmPolicy.TryParseScreenNumber("DPS: ???", out _) &&
+              !SmartFarmPolicy.TryParseScreenNumber("", out _) &&
+              !SmartFarmPolicy.TryParseScreenNumber("1e400", out _),
+            "An unreadable or out-of-range number was accepted.");
+    }
+
+    private static void SmartFarmDecisions()
+    {
+        var p = new SmartFarmPolicy { MaxWaveSeconds = 10, MarginPercent = 20 };
+        SmartFarmView Normal(int stage, double dps, double hp) => new(stage, dps, hp, false, false);
+        SmartFarmView Farm(int stage, double dps) => new(stage, dps, 1, false, true);
+        SmartFarmView Boss(int stage, double dps, double hp) => new(stage, dps, hp, true, false);
+
+        Check(p.Decide(Normal(450, 0, 1)) == SmartFarmAction.None, "Acted on an unreadable DPS.");
+        Check(p.Decide(Normal(449, 1e10, 5e10)) == SmartFarmAction.None, "Went back from a 5-second wave.");
+        Check(p.Decide(Normal(450, 1e10, 2e11)) == SmartFarmAction.GoBack, "Stayed on a 20-second wave.");
+        Check(p.TryGetSlowWaveHp(450, out var slow) && slow == 2e11, "The slow wave was not remembered.");
+
+        Check(p.Decide(Farm(449, 1e10)) == SmartFarmAction.None,
+            "Moved on although the next stage's waves are still too slow.");
+        Check(p.Decide(Farm(449, 1e11)) == SmartFarmAction.FightBoss,
+            "Did not move on once damage cleared the next stage's waves in time.");
+
+        Check(p.Decide(Boss(450, 1e11, 1e13)) == SmartFarmAction.LeaveBoss,
+            "Fought a boss that needs 100 seconds of a 60-second timer.");
+        Check(p.Decide(Boss(450, 1e11, 5e12)) == SmartFarmAction.LeaveBoss,
+            "A lower mid-fight reading hid the boss's full health.");
+        Check(p.Decide(Farm(450, 1e11)) == SmartFarmAction.None, "Retried a boss known to be out of reach.");
+        Check(p.Decide(Farm(450, 1e12)) == SmartFarmAction.FightBoss,
+            "Did not retry once the boss died within the timer and margin (10s x 1.2).");
+        Check(p.Decide(Boss(450, 1e12, 1e13)) == SmartFarmAction.None, "Left a boss it can kill.");
     }
 
     private static void PrestigeTaskGrowth()
