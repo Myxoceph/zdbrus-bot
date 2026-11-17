@@ -45,6 +45,7 @@ internal static class Program
             Test("prestige task refuses uncertain or changed game state", PrestigeTaskSafety);
             Test("boss retry threshold can use an already-open free preview", PrestigeBossRetryTrigger);
             Test("one boss attempt resets after the first lost boss only", PrestigeSingleBossAttempt);
+            Test("target mode empowers on the live boost only", PrestigeTargetMode);
             Test("prestige task waits for two slow growth samples", PrestigeTaskGrowth);
             Test("zero prestige boost waits for hourly sampling without blocking boss checks", PrestigeZeroGainSampling);
             Test("blocked prestige previews preserve the hourly sample and retry safely", PrestigeBlockedPreview);
@@ -335,6 +336,9 @@ internal static class Program
         fixture.Battle = Il2Cpp.GameInitialize.HandlerLoader.MainBattle;
         fixture.Task.InitializeConfig("test");
         fixture.Settings = MelonPreferences.Categories["temple_prestige"].Entries;
+        // The upstream triggers live on as "legacy"; their tests run in that mode.
+        ((MelonPreferences_Entry<string>)fixture.Settings["trigger_mode"]).Value = "legacy";
+        TempleGain.Percent = null;
         ((MelonPreferences_Entry<int>)fixture.Settings["stall_minutes"]).Value = 60;
         ((MelonPreferences_Entry<int>)fixture.Settings["boss_attempts"]).Value = 3;
         ((MelonPreferences_Entry<int>)fixture.Settings["min_gain_percent"]).Value = 1000;
@@ -668,6 +672,53 @@ internal static class Program
         Check(fixture.FreeClicks == 1 && fixture.PaidClicks == 0 && fixture.ConfirmClicks == 1 &&
               TemplePrestigeTask.LastDecision.Contains("Prestige confirmed"),
             "One boss attempt did not reset after a lost boss.");
+    }
+
+    private static void PrestigeTargetMode()
+    {
+        PrestigeFixture Target(double? live, int target)
+        {
+            var f = SetupPrestige(stalled: true);
+            ((MelonPreferences_Entry<string>)f.Settings["trigger_mode"]).Value = "target";
+            ((MelonPreferences_Entry<int>)f.Settings["target_gain_percent"]).Value = target;
+            // Legacy limits that would block or trigger a reset must not matter in target mode.
+            ((MelonPreferences_Entry<int>)f.Settings["min_hours_played"]).Value = 72;
+            ((MelonPreferences_Entry<int>)f.Settings["min_gain_percent"]).Value = 100000;
+            BossAttemptTracker.RecordAttempt(100);
+            BossAttemptTracker.RecordAttempt(100);
+            BossAttemptTracker.RecordAttempt(100);
+            TempleGain.Percent = live;
+            return f;
+        }
+
+        var opened = 0;
+        var fixture = Target(9000, 10000);
+        fixture.OnOpen = () => opened++;
+        Run(fixture.Task.Execute());
+        Check(opened == 0 && fixture.FreeClicks == 0 &&
+              TemplePrestigeTask.LastDecision.Contains("Waiting for the target"),
+            "Target mode opened the temple below the target despite the stall timer and boss attempts.");
+
+        fixture = Target(null, 10000);
+        Run(fixture.Task.Execute());
+        Check(fixture.FreeClicks == 0 && TemplePrestigeTask.LastDecision.Contains("unreadable"),
+            "Target mode reset without a readable live boost.");
+
+        fixture = Target(15000, 20000);
+        Run(fixture.Task.Execute());
+        Check(fixture.FreeClicks == 0,
+            "Target mode ignored a live boost below the target.");
+
+        fixture = Target(15000, 15000);
+        Run(fixture.Task.Execute());
+        Check(fixture.FreeClicks == 0 && TemplePrestigeTask.LastDecision.Contains("less than the target"),
+            "Target mode reset although the temple preview (+14,159%) was below the target.");
+
+        fixture = Target(14500, 14000);
+        Run(fixture.Task.Execute());
+        Check(fixture.FreeClicks == 1 && fixture.PaidClicks == 0 && fixture.ConfirmClicks == 1 &&
+              TemplePrestigeTask.LastDecision.Contains("Prestige confirmed"),
+            "Target mode did not empower once the live boost and the preview reached the target.");
     }
 
     private static void PrestigeTaskGrowth()

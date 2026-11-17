@@ -34,6 +34,8 @@ public class TemplePrestigeTask : BotTask
 
     // Same button as BossRetryTask: the game shows it only after a lost boss fight, while it farms the stage.
     private const string BossFight = P.Battle + "/rightSideUI/fightBossButton";
+    private MelonPreferences_Entry<string> _triggerMode;
+    private MelonPreferences_Entry<int> _targetGain;
     private MelonPreferences_Entry<int> _stallMinutes;
     private MelonPreferences_Entry<int> _bossAttempts;
     private MelonPreferences_Entry<int> _minGain;
@@ -55,16 +57,22 @@ public class TemplePrestigeTask : BotTask
     {
         c.CreateEntry("stall_hours", 1, "Hours Without Progress (Legacy)",
             "Replaced by the 30-minute or 1-hour fallback setting.", is_hidden: true);
+        _targetGain = c.CreateEntry("target_gain_percent", 300, "Target Gold Earnings %",
+            "Empower as soon as the free prestige would raise gold earnings by at least this much (the +% the temple shows). " +
+            "Read from game data every minute, without opening the temple.");
+        // "target" (default) empowers on the target above only; "legacy" brings back the hidden triggers below.
+        _triggerMode = c.CreateEntry("trigger_mode", "target", "Trigger Mode", "target or legacy.", is_hidden: true);
         _stallMinutes = c.CreateEntry("stall_minutes", 30, "Fallback Stall Timer",
-            "Fallback reset delay after no new highest stage.");
+            "Fallback reset delay after no new highest stage.", is_hidden: true);
         _bossAttempts = c.CreateEntry("boss_attempts", 3, "Boss Attempts Before Reset",
-            "Reset after this many boss attempts at the same stage. 1 resets right after the first lost boss.");
+            "Reset after this many boss attempts at the same stage. 1 resets right after the first lost boss.", is_hidden: true);
         _minGain = c.CreateEntry("min_gain_percent", 100, "Minimum Gold Boost %",
-            "Never empower for less than this extra gold (the +% the temple shows).");
-        _minHours = c.CreateEntry("min_hours_played", 1, "Minimum Hours In Run", "Never empower a run younger than this.");
+            "Never empower for less than this extra gold (the +% the temple shows).", is_hidden: true);
+        _minHours = c.CreateEntry("min_hours_played", 1, "Minimum Hours In Run", "Never empower a run younger than this.",
+            is_hidden: true);
         _efficiency = c.CreateEntry("efficiency_percent", 75, "Growth Rate Threshold %",
             "After two hourly samples below this percentage of the run's average boost growth, empower without waiting for the fallbacks. " +
-            "This is an estimate, not a proven optimum. 0 disables this trigger.");
+            "This is an estimate, not a proven optimum. 0 disables this trigger.", is_hidden: true);
         _lastGain = c.CreateEntry("last_gain", -1.0, "Last Gold Boost Sample", "Kept by the bot.", is_hidden: true);
         _lastGainAt = c.CreateEntry("last_gain_at", "", "Last Sample Time", "Kept by the bot.", is_hidden: true);
         _lastRunHours = c.CreateEntry("last_observed_run_hours", -1.0, "Last Run Age", "Kept by the bot.", is_hidden: true);
@@ -141,9 +149,15 @@ public class TemplePrestigeTask : BotTask
         if (Ui.Visible(T)) yield return Ui.Click(T + "/closeButton", 0.5f);
     }
 
+    private bool TargetMode => !string.Equals(_triggerMode.Value?.Trim(), "legacy", StringComparison.OrdinalIgnoreCase);
+
+    // Efficiency and Target are about the boost, not about being stuck, so progress past the best stage is fine.
+    private static bool AllowsProgress(PrestigeTrigger trigger)
+        => trigger is PrestigeTrigger.Efficiency or PrestigeTrigger.Target;
+
     private bool StageStillQualifies(int stage, PrestigeTrigger trigger)
         => PlayerStats.TryGetCurrentStage(out var current) && current >= stage &&
-           (trigger == PrestigeTrigger.Efficiency || current <= _bestStage.Value);
+           (AllowsProgress(trigger) || current <= _bestStage.Value);
 
     private static bool PrestigeConfirmed(int stage)
         => Ui.Visible(PrestigeComplete) ||
@@ -159,15 +173,17 @@ public class TemplePrestigeTask : BotTask
             Logger.Warning("Temple: a confirmation was already open; no prestige action attempted.");
             yield break;
         }
-        if (_stallMinutes.Value is < 30 or > 60 || _bossAttempts.Value is < 1 or > 5 ||
-            _minGain.Value < 0 || _minHours.Value < 0 || _efficiency.Value < 0)
+        var targetMode = TargetMode;
+        if (targetMode ? _targetGain.Value < 1
+            : _stallMinutes.Value is < 30 or > 60 || _bossAttempts.Value is < 1 or > 5 ||
+              _minGain.Value < 0 || _minHours.Value < 0 || _efficiency.Value < 0)
         {
             InvalidateRate();
             Report("Invalid prestige settings; no reset attempted.");
             Logger.Warning("Temple: a prestige threshold is outside its supported range; check the settings.");
             yield break;
         }
-        if (_efficiency.Value == 0 && (_lastGain.Value >= 0 || _slowStreak != 0))
+        if ((targetMode || _efficiency.Value == 0) && (_lastGain.Value >= 0 || _slowStreak != 0))
             InvalidateRate();
 
         if (!TryGetStall(out var stage, out var stalled))
@@ -190,7 +206,29 @@ public class TemplePrestigeTask : BotTask
                         DateTime.Now - sampledAt >= TimeSpan.FromHours(1));
         var stageReading = $"Stage {stage} | {stalled:0.0}h without a new best | boss tries {bossAttempts}/{_bossAttempts.Value}" +
                            (bossLost ? " (boss lost)" : "");
-        if (!isStalled && !sampleDue && !bossRetriesReached)
+        if (targetMode)
+        {
+            if (!TempleGain.TryReadPercent(out var live))
+            {
+                NextRunTime = DateTime.Now.AddMinutes(5);
+                Report("Gold earnings boost unreadable; no reset attempted.", $"Stage {stage}");
+                Logger.Warning("Temple: the live gold earnings boost could not be read; retrying in five minutes.");
+                yield break;
+            }
+
+            stageReading = $"Stage {stage} | boost +{live:0.#}% of +{_targetGain.Value}%";
+            if (live < _targetGain.Value)
+            {
+                Report("Waiting for the target gold earnings boost.", stageReading);
+                Logger.Debug($"Temple: {stageReading}.");
+                yield break;
+            }
+
+            isStalled = false;
+            bossRetriesReached = false;
+            sampleDue = false;
+        }
+        else if (!isStalled && !sampleDue && !bossRetriesReached)
         {
             Report("Waiting for progress or the next growth sample.", stageReading);
             Logger.Debug($"Temple: {stageReading}; fallback timer is {_stallMinutes.Value} minutes.");
@@ -233,8 +271,8 @@ public class TemplePrestigeTask : BotTask
             stalled = 0;
             isStalled = false;
             bossRetriesReached = false;
-            sampleDue = _efficiency.Value > 0;
-            stageReading = $"Stage {stage} | 0.0h without a new best";
+            sampleDue = !targetMode && _efficiency.Value > 0;
+            if (!targetMode) stageReading = $"Stage {stage} | 0.0h without a new best";
             Logger.Info("Temple: new or previously untracked run; cleared old growth samples.");
             BossAttemptTracker.Reset();
         }
@@ -310,16 +348,18 @@ public class TemplePrestigeTask : BotTask
             Logger.Info($"Temple: {efficiencyDecision} Rate {rate.Rate:0.##}%/h; limit {rate.Limit:0.##}%/h.");
         }
 
-        var trigger = PrestigePolicy.SelectTrigger(efficiencyTriggered, bossRetriesReached, isStalled);
+        var trigger = targetMode
+            ? gain >= _targetGain.Value ? PrestigeTrigger.Target : PrestigeTrigger.None
+            : PrestigePolicy.SelectTrigger(efficiencyTriggered, bossRetriesReached, isStalled);
         if (trigger == PrestigeTrigger.None)
         {
-            Report(efficiencyDecision, reading);
+            Report(targetMode ? "The temple shows less than the target; keeping the run." : efficiencyDecision, reading);
             yield return CloseTemple(closeScreen);
             yield break;
         }
 
         Logger.Info($"Temple: proceeding on {trigger} trigger.");
-        if (gain < _minGain.Value || played < _minHours.Value)
+        if (!targetMode && (gain < _minGain.Value || played < _minHours.Value))
         {
             var wait = gain < _minGain.Value
                 ? TimeSpan.FromMinutes(5)
@@ -334,10 +374,10 @@ public class TemplePrestigeTask : BotTask
         var latestGainText = Ui.Text(FreeGain);
         var latestAgeText = Ui.Text(Info + "/adventureTimePlayed");
         if (!stageKnown || currentStage < stage ||
-            ((trigger != PrestigeTrigger.Efficiency) && currentStage > _bestStage.Value) ||
+            (!AllowsProgress(trigger) && currentStage > _bestStage.Value) ||
             !PrestigePolicy.TryParseGain(latestGainText, out var latestGain) || latestGain < gain ||
             !PrestigePolicy.TryParseRunHours(latestAgeText, out var latestAge) ||
-            PrestigePolicy.IsNewRun(played, latestAge) || latestAge < _minHours.Value)
+            PrestigePolicy.IsNewRun(played, latestAge) || (!targetMode && latestAge < _minHours.Value))
         {
             InvalidateRate();
             Report("Run changed during the check; waiting for a fresh reading.", reading);

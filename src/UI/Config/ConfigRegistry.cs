@@ -80,6 +80,7 @@ internal static class ConfigRegistry
         ["personal_tree/keep_tokens"] = new NumberRange(0f, 5000f, true),
         ["meteorite_research/keep_meteorites"] = new NumberRange(0f, 100000f, true),
         ["temple_prestige/min_gain_percent"] = new NumberRange(0f, 100000f, true),
+        ["temple_prestige/target_gain_percent"] = new NumberRange(1f, 1000000f, true),
         ["temple_prestige/stall_minutes"] = new NumberRange(30f, 60f, true),
         ["temple_prestige/boss_attempts"] = new NumberRange(1f, 5f, true),
         ["temple_prestige/min_hours_played"] = new NumberRange(0f, 72f, true),
@@ -475,7 +476,11 @@ internal static class ConfigRegistry
         // Tasks
         ["temple_prestige/enabled"] =
             "Uses only the free empower option. The bot must also be running.\n" +
-            "The minimum boost and run age apply to every trigger.",
+            "Empowers when the live gold earnings boost reaches the target below.",
+
+        ["temple_prestige/target_gain_percent"] =
+            "Empower as soon as the free prestige would add this much gold earnings (the +% the temple shows).\n" +
+            "Read from game data every minute; the temple preview is checked again before the reset.",
 
         ["temple_prestige/stall_minutes"] =
             "Fallback reset delay after no new highest stage. Growth and repeated boss failures can trigger sooner.\n" +

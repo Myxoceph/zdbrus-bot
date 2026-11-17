@@ -43,12 +43,14 @@ internal sealed class PreciseIntegerRow : UiRow
         input.characterLimit = 10;
         input.SetTextWithoutNotify(config.ReadInt().ToString(CultureInfo.InvariantCulture));
 
-        // The prestige entries accept any non-negative number; the Myxo stage keeps to its declared range.
-        var bounded = config.Key.EndsWith("myxo_max_until_stage", StringComparison.Ordinal);
+        // The legacy prestige entries accept any non-negative number; ours keep to their declared range.
+        var myxo = config.Key.EndsWith("myxo_max_until_stage", StringComparison.Ordinal);
+        var target = config.Key.EndsWith("target_gain_percent", StringComparison.Ordinal);
+        var bounded = myxo || target;
         var min = bounded ? (int)config.Range.Min : 0;
         var max = bounded ? (int)config.Range.Max : int.MaxValue;
-        var hintText = bounded
-            ? "Max below this stage, Next milestone from it"
+        var hintText = myxo ? "Max below this stage, Next milestone from it"
+            : target ? "Empower when the temple reaches this +%"
             : config.Key.EndsWith("efficiency_percent", StringComparison.Ordinal)
                 ? "0 disables this trigger" : "0 removes the minimum";
         var hint = UiFactory.CreateLabel(RowRect, hintText, UiTheme.ChipFontSize, UiTheme.TextMuted,

@@ -19,7 +19,8 @@ internal enum PrestigeTrigger
     None,
     Efficiency,
     BossRetries,
-    StallTimer
+    StallTimer,
+    Target
 }
 
 internal readonly struct PrestigeRateResult

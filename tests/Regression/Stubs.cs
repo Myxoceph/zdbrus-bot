@@ -402,6 +402,15 @@ namespace Firebot.Core
     public static class DropCollector { public static void Tick() { } }
     public static class BubbleWatcher { public static void Tick() { } }
     public static class GameDiagnostics { public static void Tick() { } }
+    public static class TempleGain
+    {
+        public static double? Percent;
+        public static bool TryReadPercent(out double percent)
+        {
+            percent = Percent ?? 0;
+            return Percent.HasValue;
+        }
+    }
     public static class Watchdog
     {
         public static IEnumerator ForceClearAll(string phase = null) { yield break; }
