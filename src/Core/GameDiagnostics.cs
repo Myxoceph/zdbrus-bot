@@ -47,6 +47,12 @@ internal static class GameDiagnostics
     private static readonly List<float> WaveSeconds = new();
     private static string _lastWaveType = "?";
     private static double _lastBossHp;
+    private static float _bossStart = -1f;
+    private static int _bossStage;
+    private static readonly List<string> BossFights = new();
+    private const string ScreenDps = "battleRoot/battleMain/battleCanvas/SafeArea/bottomLeftSideUI/dps/dpsText";
+    private const string ScreenWaveHp =
+        "battleRoot/battleMain/battleCanvas/SafeArea/topSideUI/stageProgression/stageProgressBarBg/waveEnemyTotalHp";
 
     private static void Sample()
     {
@@ -80,11 +86,24 @@ internal static class GameDiagnostics
             if (current.Count > 0 && totalHp > _lastTotalHp + 0.5 * totalMax)
             {
                 if (_waveStart >= 0) WaveSeconds.Add(now - _waveStart);
+                PlayerStats.TryGetCurrentStage(out var stage);
+                if (_bossStart >= 0)
+                {
+                    // The wave after a boss: a higher stage means it was beaten, otherwise it was lost.
+                    BossFights.Add($"{_lastWaveType}@{_bossStage} {(stage > _bossStage ? "won" : "lost")} in {now - _bossStart:0.0}s " +
+                                   $"(hp {_lastBossHp:0.###e0})");
+                    _bossStart = -1f;
+                }
                 _waveStart = now;
                 _lastWaveHp = totalMax;
                 var sm = any?.battleController?.stageManager;
                 _lastWaveType = sm != null ? sm.GetCurrentWaveType().ToString() : "?";
-                if (_lastWaveType.Contains("Boss")) _lastBossHp = totalMax;
+                if (_lastWaveType.Contains("Boss"))
+                {
+                    _lastBossHp = totalMax;
+                    _bossStart = now;
+                    _bossStage = stage;
+                }
             }
 
             _lastHp = current;
@@ -108,11 +127,9 @@ internal static class GameDiagnostics
         var line = $"combat: dps {dps:0.###e0} over {seconds:0}s | waves cleared {waves}, avg {avgWave:0.0}s | " +
                    $"last wave {_lastWaveType} hp {_lastWaveHp:0.###e0} (hp/dps {predicted:0.0}s) | " +
                    $"last boss hp {_lastBossHp:0.###e0} (hp/dps {(dps > 0 ? _lastBossHp / dps : 0):0.0}s)";
-        var sm = UnityEngine.Object.FindObjectsOfType<EnemyBattleLogic>().FirstOrDefault(e => e != null)
-            ?.battleController?.stageManager as BattleMainStageManager;
-        if (sm != null)
-            line += $" | mult after200 {sm.stageDifficultyMultiplierAfter200}, bossExtraHp {sm.bossExtraHealthMultiplier}, " +
-                    $"bossDifficulty {sm.bossIncreaseDifficulty}, regen {sm.regenNonBoss}/{sm.regenBoss}";
+        line += $" | screen '{Firebot.Behaviors.Extra.Ui.Text(ScreenDps)}', '{Firebot.Behaviors.Extra.Ui.Text(ScreenWaveHp)}'";
+        if (BossFights.Count > 0) line += $" | boss fights: {string.Join("; ", BossFights)}";
+        BossFights.Clear();
         _damage = 0;
         _windowStart = now;
         WaveSeconds.Clear();
