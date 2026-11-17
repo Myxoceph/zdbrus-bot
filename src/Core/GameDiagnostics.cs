@@ -23,12 +23,100 @@ internal static class GameDiagnostics
 
     public static void Tick()
     {
-        if (!BotSettings.DebugMode || DateTime.Now < _next) return;
+        if (!BotSettings.DebugMode) return;
+        Sample();
+        if (DateTime.Now < _next) return;
         _next = DateTime.Now.AddMinutes(1);
         Log("battle", Battle);
         Log("temple", Temple);
         Log("firestones", FirestonesData);
         Log("enemies", Enemies);
+        Log("combat", Combat);
+    }
+
+    // --- Combat probe: damage per second and wave clear times, from enemy health -----------------------------
+    // Health is read as double: plenty up to ~1e308, and this is only a diagnostic.
+    private const float SampleSeconds = 0.5f;
+    private static float _nextSample;
+    private static Dictionary<int, double> _lastHp = new();
+    private static double _lastTotalHp;
+    private static double _damage;
+    private static float _windowStart = -1f;
+    private static float _waveStart = -1f;
+    private static double _lastWaveHp;
+    private static readonly List<float> WaveSeconds = new();
+    private static string _lastWaveType = "?";
+    private static double _lastBossHp;
+
+    private static void Sample()
+    {
+        var now = Time.realtimeSinceStartup;
+        if (now < _nextSample) return;
+        _nextSample = now + SampleSeconds;
+        try
+        {
+            var current = new Dictionary<int, double>();
+            double totalHp = 0, totalMax = 0;
+            EnemyBattleLogic any = null;
+            foreach (var e in UnityEngine.Object.FindObjectsOfType<EnemyBattleLogic>())
+            {
+                if (e == null || !e.gameObject.activeInHierarchy || e.battleCharacter == null) continue;
+                var hp = ((BigDouble)e.battleCharacter.currentHealth).ToDouble();
+                if (hp <= 0) continue;
+                current[e.GetInstanceID()] = hp;
+                totalHp += hp;
+                totalMax += ((BigDouble)e.battleCharacter.maximumHealthTotal).ToDouble();
+                any ??= e;
+            }
+
+            if (_windowStart < 0) _windowStart = now;
+            foreach (var kv in _lastHp)
+            {
+                if (current.TryGetValue(kv.Key, out var hp)) { if (kv.Value > hp) _damage += kv.Value - hp; }
+                else _damage += kv.Value; // died (or despawned) with this much health left
+            }
+
+            // A wave starts when the health on screen jumps up: enemies (re)spawned, pooled or not.
+            if (current.Count > 0 && totalHp > _lastTotalHp + 0.5 * totalMax)
+            {
+                if (_waveStart >= 0) WaveSeconds.Add(now - _waveStart);
+                _waveStart = now;
+                _lastWaveHp = totalMax;
+                var sm = any?.battleController?.stageManager;
+                _lastWaveType = sm != null ? sm.GetCurrentWaveType().ToString() : "?";
+                if (_lastWaveType.Contains("Boss")) _lastBossHp = totalMax;
+            }
+
+            _lastHp = current;
+            _lastTotalHp = totalHp;
+        }
+        catch (Exception e)
+        {
+            if (Failed.Add($"sample|{e.GetType().Name}"))
+                Logger.Warning($"[Diag] combat sample failed: {e.GetType().Name} - {e.Message}");
+        }
+    }
+
+    private static string Combat()
+    {
+        var now = Time.realtimeSinceStartup;
+        var seconds = _windowStart < 0 ? 0 : now - _windowStart;
+        var dps = seconds > 0 ? _damage / seconds : 0;
+        var waves = WaveSeconds.Count;
+        var avgWave = waves > 0 ? WaveSeconds.Average() : 0;
+        var predicted = dps > 0 ? _lastWaveHp / dps : double.PositiveInfinity;
+        var line = $"combat: dps {dps:0.###e0} over {seconds:0}s | waves cleared {waves}, avg {avgWave:0.0}s | " +
+                   $"last wave {_lastWaveType} hp {_lastWaveHp:0.###e0} (hp/dps {predicted:0.0}s) | " +
+                   $"last boss hp {_lastBossHp:0.###e0} (hp/dps {(dps > 0 ? _lastBossHp / dps : 0):0.0}s)";
+        var sm = UnityEngine.Object.FindObjectsOfType<EnemyBattleLogic>().FirstOrDefault(e => e != null)
+            ?.battleController?.stageManager as BattleMainStageManager;
+        if (sm != null)
+            line += $" | mult after200 {sm.stageDifficultyMultiplierAfter200}, bossExtraHp {sm.bossExtraHealthMultiplier}, " +
+                    $"bossDifficulty {sm.bossIncreaseDifficulty}, regen {sm.regenNonBoss}/{sm.regenBoss}";
+        _damage = 0;
+        _windowStart = now;
+        WaveSeconds.Clear();
+        return line;
     }
 
     private static void Log(string part, Func<string> read)
