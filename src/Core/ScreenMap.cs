@@ -135,7 +135,11 @@ public static class ScreenMap
             foreach (var comp in t.GetComponents<Component>())
             {
                 if (comp == null) continue;
+#if MONO
+                var n = comp.GetType().Name;
+#else
                 var n = comp.GetIl2CppType().Name;
+#endif
                 if (Boring.Contains(n) || n == "Button" || n == "Toggle" || n.StartsWith("TextMeshPro")) continue;
                 extra.Add(n);
             }
