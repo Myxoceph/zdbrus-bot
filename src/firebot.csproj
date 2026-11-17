@@ -73,6 +73,10 @@
     </ItemGroup>
 
     <ItemGroup>
+        <Using Include="Il2CppTMPro"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <EmbeddedResource Include="Planner\planner.html" LogicalName="planner.html" />
     </ItemGroup>
 
