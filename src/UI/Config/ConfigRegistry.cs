@@ -86,6 +86,7 @@ internal static class ConfigRegistry
         ["temple_prestige/efficiency_percent"] = new NumberRange(0f, 200f, true),
         ["event_exchange/keep_currency"] = new NumberRange(0f, 100000f, true),
         ["auto_upgrade/every_seconds"] = new NumberRange(10f, 600f, true),
+        ["auto_upgrade/myxo_max_until_wave"] = new NumberRange(1f, 100000f, true),
         ["boss_retry/every_minutes"] = new NumberRange(1f, 60f, true)
     };
 
@@ -108,6 +109,7 @@ internal static class ConfigRegistry
         {
             new ConfigChoice("milestone", "Next milestone"),
             new ConfigChoice("max", "Max"),
+            new ConfigChoice("myxo", "Myxo"),
             new ConfigChoice("x100", "x100"),
             new ConfigChoice("x25", "x25"),
             new ConfigChoice("x10", "x10"),

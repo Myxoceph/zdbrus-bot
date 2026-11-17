@@ -21,6 +21,9 @@ public static class AutoUpgrade
     private const float IdlePollSeconds = 0.5f;
     private const int FocusBurstLimit = 20;
 
+    /// <summary>Default wave below which the "myxo" mode buys Max; Next milestone from it on.</summary>
+    private const int DefaultMyxoMaxUntilWave = 300;
+
     private static readonly WaitForSeconds GapBetweenButtonsWait = new(GapBetweenButtonsSeconds);
     private static readonly WaitForSeconds IdlePollWait = new(IdlePollSeconds);
     private static readonly List<CachedGameButton> ButtonsBuffer = new();
@@ -37,6 +40,10 @@ public static class AutoUpgrade
     private static MelonPreferences_Entry<string> _upgradeMode;
     private static MelonPreferences_Entry<string> _priorityMode;
     private static MelonPreferences_Entry<int> _everySeconds;
+    private static MelonPreferences_Entry<int> _myxoMaxUntilWave;
+
+    /// <summary>Game mode last selected in the open menu, so a mode change is applied without reopening it.</summary>
+    private static string _appliedMode;
 
     private static bool IsEnabled => _isEnabled?.Value ?? false;
 
@@ -94,7 +101,15 @@ public static class AutoUpgrade
             "upgrade_mode",
             "milestone",
             "Upgrade Mode",
-            "How many levels each press buys: milestone (up to the next milestone, the best value), max (as many as you can afford), x100, x25, x10 or x1."
+            "How many levels each press buys: milestone (up to the next milestone, the best value), max (as many as you can afford), " +
+            "myxo (max until the Myxo wave, then milestone), x100, x25, x10 or x1."
+        );
+
+        _myxoMaxUntilWave = section.CreateEntry(
+            "myxo_max_until_wave",
+            DefaultMyxoMaxUntilWave,
+            "Myxo: Max Until Wave",
+            $"With Upgrade Mode set to Myxo, buy with Max below this wave and with Next milestone from it on. Default: {DefaultMyxoMaxUntilWave}."
         );
 
         _priorityMode = section.CreateEntry(
@@ -319,6 +334,26 @@ public static class AutoUpgrade
         }
     }
 
+    /// <summary>
+    ///     The game mode to select for the configured Upgrade Mode. "myxo" is Max below the
+    ///     "Myxo: Max Until Wave" setting and Next milestone from it on; an unreadable wave counts as
+    ///     milestone, so gold is never spent on Max on a guess.
+    /// </summary>
+    private static string EffectiveUpgradeMode()
+    {
+        var mode = (_upgradeMode?.Value ?? "milestone").Trim().ToLowerInvariant();
+        if (mode != "myxo") return mode;
+
+        var known = PlayerStats.TryGetCurrentStage(out var wave);
+        var limit = _myxoMaxUntilWave?.Value ?? DefaultMyxoMaxUntilWave;
+        var effective = known && wave < limit ? "max" : "milestone";
+        if (effective != _appliedMode)
+            Logger.Info(known
+                ? $"[AutoUpgrade] Myxo: wave {wave} (Max until {limit}), using {(effective == "max" ? "Max" : "Next milestone")}."
+                : "[AutoUpgrade] Myxo: wave unreadable, using Next milestone.");
+        return effective;
+    }
+
     private static IEnumerator RunUpgradeCycle(UncappedUpgradeMode priorityMode)
     {
         if (!Upgrades.IsVisible)
@@ -332,8 +367,20 @@ public static class AutoUpgrade
                 yield break;
             }
 
-            yield return Upgrades.SetUpgradeLevel(_upgradeMode?.Value ?? "milestone");
+            _appliedMode = EffectiveUpgradeMode();
+            yield return Upgrades.SetUpgradeLevel(_appliedMode);
             yield return IdlePollWait;
+        }
+        else
+        {
+            // The menu can stay open across cycles; apply a mode change (myxo crossing its wave) in place.
+            var mode = EffectiveUpgradeMode();
+            if (mode != _appliedMode)
+            {
+                _appliedMode = mode;
+                yield return Upgrades.SetUpgradeLevel(mode);
+                yield return IdlePollWait;
+            }
         }
 
         var buttons = Buttons();
