@@ -27,6 +27,7 @@ internal static class GameDiagnostics
         _next = DateTime.Now.AddMinutes(1);
         Log("battle", Battle);
         Log("temple", Temple);
+        Log("firestones", FirestonesData);
         Log("enemies", Enemies);
     }
 
@@ -57,6 +58,15 @@ internal static class GameDiagnostics
         if (m == null) return "temple: not loaded";
         return $"temple: prestigeRainingGold {Big(m.prestigeRainingGold)} | prestigeFirestones {Big(m.prestigeFirestones)} | " +
                $"epicPrestigeRainingGold {Big(m.epicPrestigeRainingGold)} | epicPrestigeFirestones {Big(m.epicPrestigeFirestones)}";
+    }
+
+    private static string FirestonesData()
+    {
+        var f = GameInitialize.HandlerLoader?.Firestones;
+        if (f == null) return "firestones: unavailable";
+        return $"firestones: earnedThisRun {Big(f.firestonesEarnedThisRun)} | increaseInFirestones {Big(Firestones.increaseInFirestones)} (static) | " +
+               $"increaseInMainGameGold {Big(Firestones.increaseInMainGameGold)} (static) | effectTotal {Big(f.firestoneEffectTotal)} | " +
+               $"totalGoldEarnings {Big(f.firestoneTotalGoldEarnings)} | bonusMultiplier {f.firestonesBonusMultiplier}";
     }
 
     private static string Enemies()
