@@ -653,6 +653,8 @@ namespace Firebot.Behaviors.Extra
         public const string RewardsClose = Popups + "/Rewards/bg/closeButton";
     }
 
+    internal static class SmartFarm { public static void Tick() { } }
+
     internal static class Ui
     {
         public static bool MissingCurrency;

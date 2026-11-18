@@ -34,108 +34,6 @@ internal static class GameDiagnostics
         Log("combat", Combat);
     }
 
-    // --- Combat probe: damage per second and wave clear times, from enemy health -----------------------------
-    // Health is read as double: plenty up to ~1e308, and this is only a diagnostic.
-    private const float SampleSeconds = 0.5f;
-    private static float _nextSample;
-    private static Dictionary<int, double> _lastHp = new();
-    private static double _lastTotalHp;
-    private static double _damage;
-    private static float _windowStart = -1f;
-    private static float _waveStart = -1f;
-    private static double _lastWaveHp;
-    private static readonly List<float> WaveSeconds = new();
-    private static string _lastWaveType = "?";
-    private static double _lastBossHp;
-    private static float _bossStart = -1f;
-    private static int _bossStage;
-    private static readonly List<string> BossFights = new();
-    private const string ScreenDps = "battleRoot/battleMain/battleCanvas/SafeArea/bottomLeftSideUI/dps/dpsText";
-    private const string ScreenWaveHp =
-        "battleRoot/battleMain/battleCanvas/SafeArea/topSideUI/stageProgression/stageProgressBarBg/waveEnemyTotalHp";
-
-    private static void Sample()
-    {
-        var now = Time.realtimeSinceStartup;
-        if (now < _nextSample) return;
-        _nextSample = now + SampleSeconds;
-        try
-        {
-            var current = new Dictionary<int, double>();
-            double totalHp = 0, totalMax = 0;
-            EnemyBattleLogic any = null;
-            foreach (var e in UnityEngine.Object.FindObjectsOfType<EnemyBattleLogic>())
-            {
-                if (e == null || !e.gameObject.activeInHierarchy || e.battleCharacter == null) continue;
-                var hp = ((BigDouble)e.battleCharacter.currentHealth).ToDouble();
-                if (hp <= 0) continue;
-                current[e.GetInstanceID()] = hp;
-                totalHp += hp;
-                totalMax += ((BigDouble)e.battleCharacter.maximumHealthTotal).ToDouble();
-                any ??= e;
-            }
-
-            if (_windowStart < 0) _windowStart = now;
-            foreach (var kv in _lastHp)
-            {
-                if (current.TryGetValue(kv.Key, out var hp)) { if (kv.Value > hp) _damage += kv.Value - hp; }
-                else _damage += kv.Value; // died (or despawned) with this much health left
-            }
-
-            // A wave starts when the health on screen jumps up: enemies (re)spawned, pooled or not.
-            if (current.Count > 0 && totalHp > _lastTotalHp + 0.5 * totalMax)
-            {
-                if (_waveStart >= 0) WaveSeconds.Add(now - _waveStart);
-                PlayerStats.TryGetCurrentStage(out var stage);
-                if (_bossStart >= 0)
-                {
-                    // The wave after a boss: a higher stage means it was beaten, otherwise it was lost.
-                    BossFights.Add($"{_lastWaveType}@{_bossStage} {(stage > _bossStage ? "won" : "lost")} in {now - _bossStart:0.0}s " +
-                                   $"(hp {_lastBossHp:0.###e0})");
-                    _bossStart = -1f;
-                }
-                _waveStart = now;
-                _lastWaveHp = totalMax;
-                var sm = any?.battleController?.stageManager;
-                _lastWaveType = sm != null ? sm.GetCurrentWaveType().ToString() : "?";
-                if (_lastWaveType.Contains("Boss"))
-                {
-                    _lastBossHp = totalMax;
-                    _bossStart = now;
-                    _bossStage = stage;
-                }
-            }
-
-            _lastHp = current;
-            _lastTotalHp = totalHp;
-        }
-        catch (Exception e)
-        {
-            if (Failed.Add($"sample|{e.GetType().Name}"))
-                Logger.Warning($"[Diag] combat sample failed: {e.GetType().Name} - {e.Message}");
-        }
-    }
-
-    private static string Combat()
-    {
-        var now = Time.realtimeSinceStartup;
-        var seconds = _windowStart < 0 ? 0 : now - _windowStart;
-        var dps = seconds > 0 ? _damage / seconds : 0;
-        var waves = WaveSeconds.Count;
-        var avgWave = waves > 0 ? WaveSeconds.Average() : 0;
-        var predicted = dps > 0 ? _lastWaveHp / dps : double.PositiveInfinity;
-        var line = $"combat: dps {dps:0.###e0} over {seconds:0}s | waves cleared {waves}, avg {avgWave:0.0}s | " +
-                   $"last wave {_lastWaveType} hp {_lastWaveHp:0.###e0} (hp/dps {predicted:0.0}s) | " +
-                   $"last boss hp {_lastBossHp:0.###e0} (hp/dps {(dps > 0 ? _lastBossHp / dps : 0):0.0}s)";
-        line += $" | screen '{Firebot.Behaviors.Extra.Ui.Text(ScreenDps)}', '{Firebot.Behaviors.Extra.Ui.Text(ScreenWaveHp)}'";
-        if (BossFights.Count > 0) line += $" | boss fights: {string.Join("; ", BossFights)}";
-        BossFights.Clear();
-        _damage = 0;
-        _windowStart = now;
-        WaveSeconds.Clear();
-        return line;
-    }
-
     private static void Log(string part, Func<string> read)
     {
         try
@@ -147,6 +45,65 @@ internal static class GameDiagnostics
             if (Failed.Add($"{part}|{e.GetType().Name}"))
                 Logger.Warning($"[Diag] {part} read failed: {e.GetType().Name} - {e.Message}");
         }
+    }
+
+    // --- Combat: what CombatProbe sees, next to what the screen prints ----------------------------------------
+    private static bool _subscribed;
+    private static readonly List<float> WaveSeconds = new();
+    private static readonly List<string> BossFights = new();
+    private static string _waveType = "?";
+    private static double _waveHp;
+    private static int _waveStage;
+    private const string ScreenDps = "battleRoot/battleMain/battleCanvas/SafeArea/bottomLeftSideUI/dps/dpsText";
+    private const string ScreenWaveHp =
+        "battleRoot/battleMain/battleCanvas/SafeArea/topSideUI/stageProgression/stageProgressBarBg/waveEnemyTotalHp";
+
+    private static void Sample()
+    {
+        try
+        {
+            if (!_subscribed)
+            {
+                _subscribed = true;
+                CombatProbe.WaveStarted += OnWaveStarted;
+            }
+            CombatProbe.Tick();
+        }
+        catch (Exception e)
+        {
+            if (Failed.Add($"sample|{e.GetType().Name}"))
+                Logger.Warning($"[Diag] combat sample failed: {e.GetType().Name} - {e.Message}");
+        }
+    }
+
+    private static void OnWaveStarted(float lasted)
+    {
+        PlayerStats.TryGetCurrentStage(out var stage);
+        if (lasted >= 0)
+        {
+            WaveSeconds.Add(lasted);
+            // The wave after a boss: a higher stage means it was beaten, otherwise it was lost or left.
+            if (_waveType.Contains("Boss"))
+                BossFights.Add($"{_waveType}@{_waveStage} {(stage > _waveStage ? "won" : "not won")} in {lasted:0.0}s (hp {_waveHp:0.###e0})");
+        }
+        _waveType = CombatProbe.WaveType;
+        _waveHp = CombatProbe.WaveHp;
+        _waveStage = stage;
+    }
+
+    private static string Combat()
+    {
+        var dps = CombatProbe.Dps;
+        var waves = WaveSeconds.Count;
+        var avg = waves > 0 ? WaveSeconds.Average() : 0;
+        var hp = CombatProbe.WaveHp;
+        var line = $"combat: dps {dps:0.###e0} (15s) | waves cleared {waves}, avg {avg:0.0}s | " +
+                   $"wave {CombatProbe.WaveType} hp {hp:0.###e0} (hp/dps {(dps > 0 ? hp / dps : double.PositiveInfinity):0.0}s)" +
+                   $" | screen '{Firebot.Behaviors.Extra.Ui.Text(ScreenDps)}', '{Firebot.Behaviors.Extra.Ui.Text(ScreenWaveHp)}'";
+        if (BossFights.Count > 0) line += $" | boss fights: {string.Join("; ", BossFights)}";
+        WaveSeconds.Clear();
+        BossFights.Clear();
+        return line;
     }
 
     private static string Battle()

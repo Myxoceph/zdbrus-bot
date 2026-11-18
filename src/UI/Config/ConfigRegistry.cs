@@ -119,6 +119,11 @@ internal static class ConfigRegistry
             new ConfigChoice("x10", "x10"),
             new ConfigChoice("x1", "x1")
         },
+        ["smart_farm/dps_source"] = new[]
+        {
+            new ConfigChoice("measured", "Measured"),
+            new ConfigChoice("screen", "Screen")
+        },
         ["auto_upgrade/priority_mode"] = new[]
         {
             new ConfigChoice("balanced", "Balance"),

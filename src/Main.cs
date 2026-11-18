@@ -115,6 +115,7 @@ public class Main : MelonMod
             DropCollector.Tick();
             BubbleWatcher.Tick();
             GameDiagnostics.Tick();
+            Behaviors.Extra.SmartFarm.Tick();
             BotPanel.Tick();
             BotStatusScreen.Tick();
         }
