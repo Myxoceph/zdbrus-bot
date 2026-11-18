@@ -781,7 +781,12 @@ public class EventChallengesTask : BotTask
             var entry = Ui.VisibleChildren(List).Where(t => t.name.StartsWith("eventInteraction")).Skip(i).FirstOrDefault();
             if (entry == null) break;
             yield return Ui.Click(entry, 2f);
-            if (!Ui.Visible(Mini)) continue;
+            if (!Ui.Visible(Mini))
+            {
+                // Events with their own menu (Decorated Heroes, ...) would otherwise stay open over the list.
+                yield return DecoratedHeroesTask.CloseOtherEvent();
+                continue;
+            }
 
             yield return Ui.Click(Mini + "/submenuButtons/challenges", 1.5f);
             foreach (var ch in Ui.VisibleChildren(Challenges).ToList())
