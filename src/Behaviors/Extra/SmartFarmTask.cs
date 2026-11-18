@@ -9,7 +9,7 @@ namespace Firebot.Behaviors.Extra;
 
 /// <summary>
 ///     Settings and panel section for Smart Farm. The work runs in <see cref="SmartFarm" /> once a second,
-///     outside the task scheduler, so a boss can be left as soon as it appears.
+///     outside the task scheduler and independent of F7, so a boss can be left as soon as it appears.
 /// </summary>
 public class SmartFarmTask : BotTask
 {
@@ -19,7 +19,7 @@ public class SmartFarmTask : BotTask
     private MelonPreferences_Entry<int> _marginPercent;
     private MelonPreferences_Entry<int> _dpsFactorPercent;
 
-    /// <summary>Boss Retry checks this and stays idle while Smart Farm decides when to fight.</summary>
+    /// <summary>Enabled in F1; Boss Retry checks this and stays idle while Smart Farm decides when to fight.</summary>
     internal static bool Active => _instance != null && _instance.IsEnabled;
 
     internal static bool UseScreenDps =>
@@ -72,7 +72,8 @@ internal static class SmartFarm
 
     public static void Tick()
     {
-        if (!SmartFarmTask.Active || !BotManager.IsRunning) return;
+        // Like AutoUpgrade: runs on its own Enable switch as soon as the game is ready, bot started or not.
+        if (!SmartFarmTask.Active) return;
         try
         {
             CombatProbe.Tick();
