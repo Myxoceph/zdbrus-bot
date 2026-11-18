@@ -23,20 +23,21 @@ internal static class CombatProbe
     private static float _nextSample;
     private static Dictionary<int, double> _lastHp = new();
     private static double _lastTotalHp;
-    private static readonly Queue<(float At, double Damage)> Hits = new();
+    // Only time with enemies on screen counts: while the next wave walks in nobody takes damage, and counting
+    // that made the DPS swing 60x between samples.
+    private static readonly Queue<(float At, double Damage, float Active)> Hits = new();
     private static double _windowDamage;
-    private static float _firstSample = -1f;
+    private static float _windowActive;
+    private static float _lastSampleAt = -1f;
 
-    /// <summary>Damage per second over the last 15 seconds; 0 until 5 seconds have been watched.</summary>
-    public static double Dps
-    {
-        get
-        {
-            if (_firstSample < 0) return 0;
-            var span = Math.Min(WindowSeconds, Time.realtimeSinceStartup - _firstSample);
-            return span >= 5f ? _windowDamage / span : 0;
-        }
-    }
+    /// <summary>Damage per second of fighting time over the last 15 seconds; 0 until 3 seconds were watched.</summary>
+    public static double Dps => _windowActive >= 3f ? _windowDamage / _windowActive : 0;
+
+    /// <summary>Health the enemies on screen have left.</summary>
+    public static double RemainingHp { get; private set; }
+
+    /// <summary>Seconds since the current wave appeared.</summary>
+    public static double WaveElapsed => WaveStartedAt >= 0 ? Time.realtimeSinceStartup - WaveStartedAt : 0;
 
     /// <summary>Full health of the wave on screen, from the enemies' maximum health.</summary>
     public static double WaveHp { get; private set; }
@@ -68,7 +69,8 @@ internal static class CombatProbe
             any ??= e;
         }
 
-        if (_firstSample < 0) _firstSample = now;
+        var dt = _lastSampleAt >= 0 ? Math.Min(now - _lastSampleAt, 1f) : 0f;
+        _lastSampleAt = now;
         double damage = 0;
         foreach (var kv in _lastHp)
         {
@@ -76,30 +78,45 @@ internal static class CombatProbe
             else damage += kv.Value; // died (or despawned) with this much health left
         }
 
-        if (damage > 0)
+        // Fighting time: enemies were on screen at both ends of the interval.
+        var active = _lastHp.Count > 0 && current.Count > 0 ? dt : 0f;
+        if (damage > 0 || active > 0)
         {
-            Hits.Enqueue((now, damage));
+            Hits.Enqueue((now, damage, active));
             _windowDamage += damage;
+            _windowActive += active;
         }
 
         while (Hits.Count > 0 && Hits.Peek().At < now - WindowSeconds)
-            _windowDamage -= Hits.Dequeue().Damage;
-        if (Hits.Count == 0) _windowDamage = 0;
+        {
+            var old = Hits.Dequeue();
+            _windowDamage -= old.Damage;
+            _windowActive -= old.Active;
+        }
+        if (Hits.Count == 0)
+        {
+            _windowDamage = 0;
+            _windowActive = 0;
+        }
 
-        // A wave starts when the health on screen jumps up: enemies (re)spawned, pooled or not.
-        if (current.Count > 0 && totalHp > _lastTotalHp + 0.5 * totalMax)
+        // A wave starts when the health on screen jumps up (enemies spawned, pooled or not) or when the game
+        // switches wave type: a boss must never share a wave with the normal enemies before it.
+        var sm = any?.battleController?.stageManager;
+        var type = sm != null ? sm.GetCurrentWaveType().ToString() : WaveType;
+        if (current.Count > 0 && (totalHp > _lastTotalHp + 0.5 * totalMax || type != WaveType))
         {
             var lasted = WaveStartedAt >= 0 ? now - WaveStartedAt : -1f;
             WaveStartedAt = now;
             WaveHp = totalMax;
-            var sm = any?.battleController?.stageManager;
-            WaveType = sm != null ? sm.GetCurrentWaveType().ToString() : "?";
+            WaveType = type;
             WaveStarted?.Invoke(lasted);
         }
         else if (current.Count > 0)
         {
             WaveHp = Math.Max(WaveHp, totalMax);
         }
+
+        RemainingHp = totalHp;
 
         _lastHp = current;
         _lastTotalHp = totalHp;

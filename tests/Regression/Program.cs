@@ -739,29 +739,55 @@ internal static class Program
 
     private static void SmartFarmDecisions()
     {
+        var t0 = new DateTime(2026, 11, 18, 12, 0, 0);
         var p = new SmartFarmPolicy { MaxWaveSeconds = 10, MarginPercent = 20 };
-        SmartFarmView Normal(int stage, double dps, double hp) => new(stage, dps, hp, false, false);
+        SmartFarmView Normal(int stage, double dps, double hp, double elapsed = 0, double left = -1) =>
+            new(stage, dps, hp, false, false, false, elapsed, left);
         SmartFarmView Farm(int stage, double dps) => new(stage, dps, 1, false, true);
-        SmartFarmView Boss(int stage, double dps, double hp) => new(stage, dps, hp, true, false);
+        SmartFarmView Boss(int stage, double dps, double hp, double elapsed = 0, double left = -1) =>
+            new(stage, dps, hp, true, false, true, elapsed, left);
 
-        Check(p.Decide(Normal(450, 0, 1)) == SmartFarmAction.None, "Acted on an unreadable DPS.");
-        Check(p.Decide(Normal(449, 1e10, 5e10)) == SmartFarmAction.None, "Went back from a 5-second wave.");
-        Check(p.Decide(Normal(450, 1e10, 2e11)) == SmartFarmAction.GoBack, "Stayed on a 20-second wave.");
-        Check(p.TryGetSlowWaveHp(450, out var slow) && slow == 2e11, "The slow wave was not remembered.");
+        Check(p.Decide(Normal(450, 0, 1), t0) == SmartFarmAction.None, "Acted on an unreadable DPS.");
+        Check(p.Decide(Normal(449, 1e10, 5e10), t0) == SmartFarmAction.None, "Went back from a 5-second wave.");
+        Check(p.Decide(Normal(450, 1e10, 2e11), t0) == SmartFarmAction.GoBack, "Stayed on a 20-second wave.");
+        Check(p.TryGetSlowWaveHp(450, t0, out var slow) && slow == 2e11, "The slow wave was not remembered.");
 
-        Check(p.Decide(Farm(449, 1e10)) == SmartFarmAction.None,
+        Check(p.Decide(Farm(449, 1e10), t0) == SmartFarmAction.None,
             "Moved on although the next stage's waves are still too slow.");
-        Check(p.Decide(Farm(449, 1e11)) == SmartFarmAction.FightBoss,
+        Check(p.Decide(Farm(449, 1e11), t0) == SmartFarmAction.FightBoss,
             "Did not move on once damage cleared the next stage's waves in time.");
 
-        Check(p.Decide(Boss(450, 1e11, 1e13)) == SmartFarmAction.LeaveBoss,
+        // Boss health never counts as a normal wave's, even while the wave type lags behind.
+        Check(p.Decide(new SmartFarmView(451, 1e10, 1e13, false, false, true), t0) == SmartFarmAction.None &&
+              !p.TryGetSlowWaveHp(451, t0, out _),
+            "A boss's health was taken for a slow normal wave.");
+
+        // Area damage: predicted 5s, but the wave is still alive after 13s.
+        Check(p.Decide(Normal(452, 1e11, 5e11, 13, 2e11), t0) == SmartFarmAction.GoBack,
+            "Stayed on a wave that took far longer than predicted.");
+        Check(p.TryGetSlowWaveHp(452, t0, out var observed) && Math.Abs(observed - 1.5e12) < 1e6,
+            "The observed slowness was not remembered as equivalent health (13s x DPS + health left).");
+        Check(p.Decide(Farm(451, 1e11), t0) == SmartFarmAction.None,
+            "Went back to a stage that just proved too slow.");
+
+        Check(p.Decide(Boss(450, 1e11, 1e13), t0) == SmartFarmAction.LeaveBoss,
             "Fought a boss that needs 100 seconds of a 60-second timer.");
-        Check(p.Decide(Boss(450, 1e11, 5e12)) == SmartFarmAction.LeaveBoss,
+        Check(p.Decide(Boss(450, 1e11, 5e12), t0) == SmartFarmAction.LeaveBoss,
             "A lower mid-fight reading hid the boss's full health.");
-        Check(p.Decide(Farm(450, 1e11)) == SmartFarmAction.None, "Retried a boss known to be out of reach.");
-        Check(p.Decide(Farm(450, 1e12)) == SmartFarmAction.FightBoss,
+        Check(p.Decide(Farm(450, 1e11), t0) == SmartFarmAction.None, "Retried a boss known to be out of reach.");
+        Check(p.Decide(Farm(450, 1e12), t0) == SmartFarmAction.FightBoss,
             "Did not retry once the boss died within the timer and margin (10s x 1.2).");
-        Check(p.Decide(Boss(450, 1e12, 1e13)) == SmartFarmAction.None, "Left a boss it can kill.");
+        Check(p.Decide(Boss(450, 1e12, 1e13), t0) == SmartFarmAction.None, "Left a boss it can kill.");
+
+        // Live: 30s boss on paper; the team keeps up at 40s, falls behind at 45s (wiped by area damage).
+        Check(p.Decide(Boss(460, 1e11, 3e12, 40, 1.5e12), t0) == SmartFarmAction.None,
+            "Left a boss that was still on schedule (40s + 15s x 1.2).");
+        Check(p.Decide(Boss(460, 1e11, 3e12, 45, 1.5e12), t0) == SmartFarmAction.LeaveBoss,
+            "Stayed in a boss fight that could no longer finish in time (45s + 15s x 1.2).");
+
+        // Records expire, so one bad reading cannot block progress for good.
+        Check(p.Decide(Farm(451, 1e11), t0.AddMinutes(11)) == SmartFarmAction.FightBoss,
+            "A ten-minute-old slow wave still blocked progress.");
     }
 
     private static void PrestigeTaskGrowth()

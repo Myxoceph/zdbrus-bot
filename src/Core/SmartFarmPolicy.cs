@@ -12,24 +12,28 @@ internal enum SmartFarmAction
     LeaveBoss
 }
 
-/// <summary>What the battle screen shows right now, as read by the Smart Farm task.</summary>
+/// <summary>What the battlefield shows right now, as read by Smart Farm.</summary>
 internal readonly struct SmartFarmView
 {
-    public SmartFarmView(int stage, double dps, double waveHp, bool bossFight, bool farming)
+    public SmartFarmView(int stage, double dps, double waveHp, bool bossFight, bool farming,
+        bool waveIsBoss = false, double elapsed = 0, double remainingHp = -1)
     {
         Stage = stage;
         Dps = dps;
         WaveHp = waveHp;
         BossFight = bossFight;
         Farming = farming;
+        WaveIsBoss = waveIsBoss;
+        Elapsed = elapsed;
+        RemainingHp = remainingHp < 0 ? waveHp : remainingHp;
     }
 
     public int Stage { get; }
 
-    /// <summary>Screen DPS already scaled by the DPS factor setting.</summary>
+    /// <summary>Damage per second the team deals.</summary>
     public double Dps { get; }
 
-    /// <summary>The enemy health the stage bar shows.</summary>
+    /// <summary>Full health of the current wave.</summary>
     public double WaveHp { get; }
 
     /// <summary>A boss wave is running (its timer or leave button is shown).</summary>
@@ -37,25 +41,40 @@ internal readonly struct SmartFarmView
 
     /// <summary>The game is farming the wave before the boss (the Fight boss button is shown).</summary>
     public bool Farming { get; }
+
+    /// <summary>The wave on screen is a boss wave of any kind; its health never counts as a normal wave's.</summary>
+    public bool WaveIsBoss { get; }
+
+    /// <summary>Seconds since the current wave appeared.</summary>
+    public double Elapsed { get; }
+
+    /// <summary>Health the current wave has left.</summary>
+    public double RemainingHp { get; }
 }
 
 /// <summary>
-///     Farm where the team's damage clears waves quickly, and move on only when it can. All numbers come from
-///     the battle screen: the DPS text and the stage bar's enemy health.
+///     Farm where the team's damage clears waves quickly, and move on only when it can.
 ///     <para>
-///         A normal wave slower than the limit sends the team back one stage. A boss that cannot die within the
-///         boss timer is left at once instead of being fought to the end. While farming, the boss is fought
-///         only when the known boss health and the next stage's slow wave (if one was seen) are both within
-///         reach, with the safety margin. A boss never seen yet is tried: leaving it costs a moment.
+///         Normal waves: one that would take (health / DPS) or has already taken longer than Max Wave Seconds
+///         sends the team back one stage. Bosses: one that cannot die within the 60-second timer is left at
+///         once, and during the fight it is left as soon as the time spent plus the time still needed passes
+///         the timer - that catches team wipes from area damage, which health and DPS cannot predict. While
+///         farming, the boss is fought only when the remembered boss and the next stage's slow waves are within
+///         reach. Every number is checked with the safety margin.
+///     </para>
+///     <para>
+///         A slow wave or a boss that ended badly is remembered as "equivalent health": what the team would
+///         have had to clear at its DPS then (time spent x DPS + health left). Records expire after
+///         <see cref="MemoryMinutes" />, so a bad reading cannot block progress for good.
 ///     </para>
 /// </summary>
 internal sealed class SmartFarmPolicy
 {
     public const double BossSeconds = 60;
+    public const double MemoryMinutes = 10;
 
-    // Highest health seen per stage: the bar shows what is left, so the first reading is the largest.
-    private readonly Dictionary<int, double> _bossHp = new();
-    private readonly Dictionary<int, double> _slowWaveHp = new();
+    private readonly Dictionary<int, (double Hp, DateTime At)> _bossHp = new();
+    private readonly Dictionary<int, (double Hp, DateTime At)> _slowWaveHp = new();
     private int _waveStage = -1;
     private double _waveHp;
 
@@ -64,14 +83,16 @@ internal sealed class SmartFarmPolicy
 
     public string LastReason { get; private set; } = "";
 
-    public bool TryGetBossHp(int stage, out double hp) => _bossHp.TryGetValue(stage, out hp);
-    public bool TryGetSlowWaveHp(int stage, out double hp) => _slowWaveHp.TryGetValue(stage, out hp);
+    public bool TryGetBossHp(int stage, DateTime now, out double hp) => TryRecall(_bossHp, stage, now, out hp);
+    public bool TryGetSlowWaveHp(int stage, DateTime now, out double hp) => TryRecall(_slowWaveHp, stage, now, out hp);
 
     private double Margin => 1 + Math.Max(0, MarginPercent) / 100;
 
     private static double Seconds(double hp, double dps) => dps > 0 ? hp / dps : double.PositiveInfinity;
 
-    public SmartFarmAction Decide(SmartFarmView view)
+    public SmartFarmAction Decide(SmartFarmView view) => Decide(view, DateTime.Now);
+
+    public SmartFarmAction Decide(SmartFarmView view, DateTime now)
     {
         LastReason = "";
         if (view.Stage <= 0 || view.Dps <= 0 || double.IsNaN(view.WaveHp) || view.WaveHp < 0)
@@ -80,40 +101,35 @@ internal sealed class SmartFarmPolicy
             return SmartFarmAction.None;
         }
 
-        if (view.BossFight)
-        {
-            var bossHp = Remember(_bossHp, view.Stage, view.WaveHp);
-            var seconds = Seconds(bossHp, view.Dps);
-            if (seconds * Margin > BossSeconds)
-            {
-                LastReason = $"boss at stage {view.Stage} needs {seconds:0.#}s (+{MarginPercent:0}% margin) of {BossSeconds:0}s";
-                return SmartFarmAction.LeaveBoss;
-            }
-
-            LastReason = $"boss at stage {view.Stage} needs {seconds:0.#}s";
-            return SmartFarmAction.None;
-        }
+        if (view.BossFight) return DecideBoss(view, now);
 
         if (view.Farming)
         {
             _waveStage = -1;
-            if (_bossHp.TryGetValue(view.Stage, out var bossHp) && Seconds(bossHp, view.Dps) * Margin > BossSeconds)
+            if (TryRecall(_bossHp, view.Stage, now, out var bossHp) && Seconds(bossHp, view.Dps) * Margin > BossSeconds)
             {
                 LastReason = $"farming: boss at stage {view.Stage} needs {Seconds(bossHp, view.Dps):0.#}s";
                 return SmartFarmAction.None;
             }
 
-            if (_slowWaveHp.TryGetValue(view.Stage + 1, out var slowHp) &&
+            if (TryRecall(_slowWaveHp, view.Stage + 1, now, out var slowHp) &&
                 Seconds(slowHp, view.Dps) * Margin > MaxWaveSeconds)
             {
                 LastReason = $"farming: stage {view.Stage + 1} waves need {Seconds(slowHp, view.Dps):0.#}s";
                 return SmartFarmAction.None;
             }
 
-            LastReason = _bossHp.ContainsKey(view.Stage)
+            LastReason = TryRecall(_bossHp, view.Stage, now, out _)
                 ? $"boss at stage {view.Stage} is within reach"
                 : $"boss at stage {view.Stage} not seen yet; trying it";
             return SmartFarmAction.FightBoss;
+        }
+
+        // Between a boss and the next normal wave the wave type can lag; boss health never counts here.
+        if (view.WaveIsBoss)
+        {
+            LastReason = "waiting for a normal wave";
+            return SmartFarmAction.None;
         }
 
         // A normal wave, while the game moves forward on its own.
@@ -124,23 +140,72 @@ internal sealed class SmartFarmPolicy
         }
 
         _waveHp = Math.Max(_waveHp, view.WaveHp);
-        var waveSeconds = Seconds(_waveHp, view.Dps);
-        if (waveSeconds > MaxWaveSeconds)
+        var predicted = Seconds(_waveHp, view.Dps);
+        if (predicted > MaxWaveSeconds)
         {
-            Remember(_slowWaveHp, view.Stage, _waveHp);
-            LastReason = $"stage {view.Stage} waves need {waveSeconds:0.#}s of {MaxWaveSeconds:0.#}s";
+            Remember(_slowWaveHp, view.Stage, _waveHp, now);
+            LastReason = $"stage {view.Stage} waves need {predicted:0.#}s of {MaxWaveSeconds:0.#}s";
             _waveStage = -1;
             return SmartFarmAction.GoBack;
         }
 
-        LastReason = $"stage {view.Stage} waves need {waveSeconds:0.#}s";
+        // Observed: the wave is already taking too long (area damage wiping the team, regeneration, ...).
+        if (view.Elapsed > MaxWaveSeconds * Margin)
+        {
+            var equivalent = Math.Max(_waveHp, view.Elapsed * view.Dps + view.RemainingHp);
+            Remember(_slowWaveHp, view.Stage, equivalent, now);
+            LastReason = $"stage {view.Stage} wave still alive after {view.Elapsed:0.#}s (predicted {predicted:0.#}s)";
+            _waveStage = -1;
+            return SmartFarmAction.GoBack;
+        }
+
+        LastReason = $"stage {view.Stage} waves need {predicted:0.#}s";
         return SmartFarmAction.None;
     }
 
-    private static double Remember(Dictionary<int, double> map, int stage, double hp)
+    private SmartFarmAction DecideBoss(SmartFarmView view, DateTime now)
     {
-        var known = map.TryGetValue(stage, out var old) ? Math.Max(old, hp) : hp;
-        map[stage] = known;
+        var full = Remember(_bossHp, view.Stage, view.WaveHp, now);
+        var fullSeconds = Seconds(full, view.Dps);
+        if (fullSeconds * Margin > BossSeconds)
+        {
+            LastReason = $"boss at stage {view.Stage} needs {fullSeconds:0.#}s (+{MarginPercent:0}% margin) of {BossSeconds:0}s";
+            return SmartFarmAction.LeaveBoss;
+        }
+
+        // Live: time already spent plus what the boss still needs at the current DPS.
+        var projected = view.Elapsed + Seconds(view.RemainingHp, view.Dps) * Margin;
+        if (projected > BossSeconds)
+        {
+            Remember(_bossHp, view.Stage, view.Elapsed * view.Dps + view.RemainingHp, now);
+            LastReason = $"boss at stage {view.Stage} falling behind: {view.Elapsed:0.#}s spent, " +
+                         $"{Seconds(view.RemainingHp, view.Dps):0.#}s still needed";
+            return SmartFarmAction.LeaveBoss;
+        }
+
+        LastReason = $"boss at stage {view.Stage}: {view.Elapsed:0.#}s spent, {Seconds(view.RemainingHp, view.Dps):0.#}s to go";
+        return SmartFarmAction.None;
+    }
+
+    private static bool TryRecall(Dictionary<int, (double Hp, DateTime At)> map, int stage, DateTime now, out double hp)
+    {
+        hp = 0;
+        if (!map.TryGetValue(stage, out var entry)) return false;
+        if (now - entry.At > TimeSpan.FromMinutes(MemoryMinutes))
+        {
+            map.Remove(stage);
+            return false;
+        }
+
+        hp = entry.Hp;
+        return true;
+    }
+
+    /// <summary>Keeps the highest health seen (the first reading of a wave is its fullest) and refreshes its age.</summary>
+    private static double Remember(Dictionary<int, (double Hp, DateTime At)> map, int stage, double hp, DateTime now)
+    {
+        var known = TryRecall(map, stage, now, out var old) ? Math.Max(old, hp) : hp;
+        map[stage] = (known, now);
         return known;
     }
 

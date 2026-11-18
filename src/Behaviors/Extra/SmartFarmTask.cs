@@ -119,7 +119,8 @@ internal static class SmartFarm
                         Ui.Clickable(LeaveBossTop) || Ui.Clickable(LeaveBossLeft);
         var farming = !bossFight && fightButton;
 
-        var action = Policy.Decide(new SmartFarmView(stage, dps, CombatProbe.WaveHp, bossFight, farming));
+        var action = Policy.Decide(new SmartFarmView(stage, dps, CombatProbe.WaveHp, bossFight, farming,
+            CombatProbe.IsBossWave, CombatProbe.WaveElapsed, CombatProbe.RemainingHp));
         switch (action)
         {
             case SmartFarmAction.GoBack:
